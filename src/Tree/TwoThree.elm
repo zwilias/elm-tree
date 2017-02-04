@@ -124,40 +124,42 @@ remove item tree =
                     ThreeNode lower _ _ _ _ ->
                         findNextLarger item lower
 
+        taggedRemove : comparable -> Tree comparable -> DeletionResult comparable
+        taggedRemove item tree =
+            doRemove item tree |> tag
+
         doRemove : comparable -> Tree comparable -> DeletionResult comparable
         doRemove item tree =
             case tree of
                 -- If its an empty tree, we can't possibly contain the value
                 -- you're looking for
                 Empty ->
-                    tag NotFound
+                    NotFound
 
                 -- Leafnode with 1 key: either it is us and we're "orphaning" an empty subtree (which means we're creating a hole in the tree that must somehow be filled), or it does not exists
                 TwoNode Empty self Empty ->
                     if self == item then
-                        tag <| Merged empty
+                        Merged empty
                     else
-                        tag NotFound
+                        NotFound
 
                 -- Leafnode with 2 keys: Either punching a hole that can be filled by simply replacing with a singleton, or not found
                 ThreeNode Empty left Empty right Empty ->
                     if left == item then
                         singleton right
                             |> Replaced
-                            |> tag
                     else if right == item then
                         singleton left
                             |> Replaced
-                            |> tag
                     else
-                        tag NotFound
+                        NotFound
 
                 -- internal node with 1 key: If our key is the key to be removed, look instead for the next larget node in the right-hand side of the tree, and "act" as if our node is located there
                 TwoNode lower self greater ->
                     if item < self then
-                        case doRemove item lower of
+                        case taggedRemove item lower of
                             NotFound ->
-                                tag NotFound
+                                NotFound
 
                             Merged mergeTree ->
                                 -- This needs careful handling. Either our right hand side is a threenode and has a node we can borrow to restore the balance here, or it's a two node, which means we Merge with the right hand side, creating a 3 node and let our parents deal with it.
@@ -179,7 +181,6 @@ remove item tree =
                                                 sGreater
                                             )
                                             |> Replaced
-                                            |> tag
 
                                     TwoNode sLower sSelf sGreater ->
                                         ThreeNode
@@ -189,13 +190,11 @@ remove item tree =
                                             sSelf
                                             sGreater
                                             |> Merged
-                                            |> tag
 
                             -- Finally, a SIMPLE CASE YAY.
                             Replaced replacement ->
                                 TwoNode replacement self greater
                                     |> Replaced
-                                    |> tag
                     else if item == self then
                         let
                             nextLarger : comparable
@@ -203,7 +202,7 @@ remove item tree =
                                 findNextLarger item greater
                         in
                             -- We're an internal node, so we need to cheat a bit and remove the next larger (or lower, but we chose larger.) leafnode, taking care to re-insert that node and forget all about our self.
-                            case doRemove nextLarger greater of
+                            case taggedRemove nextLarger greater of
                                 NotFound ->
                                     Debug.crash "We know it's there, just remove it, you can't tell me it wasn't found."
 
@@ -220,7 +219,6 @@ remove item tree =
                                                 nextLarger
                                                 mergeTree
                                                 |> Merged
-                                                |> tag
 
                                         ThreeNode sLower sLeft sBetween sRight sGreater ->
                                             TwoNode
@@ -228,7 +226,6 @@ remove item tree =
                                                 sRight
                                                 (TwoNode sGreater nextLarger mergeTree)
                                                 |> Replaced
-                                                |> tag
 
                                 Replaced replacement ->
                                     TwoNode
@@ -236,11 +233,10 @@ remove item tree =
                                         nextLarger
                                         replacement
                                         |> Replaced
-                                        |> tag
                     else
-                        case doRemove item greater of
+                        case taggedRemove item greater of
                             NotFound ->
-                                tag NotFound
+                                NotFound
 
                             Merged mergeTree ->
                                 case lower of
@@ -255,7 +251,6 @@ remove item tree =
                                             self
                                             mergeTree
                                             |> Merged
-                                            |> tag
 
                                     ThreeNode sLower sLeft sBetween sRight sGreater ->
                                         TwoNode
@@ -263,19 +258,17 @@ remove item tree =
                                             sRight
                                             (TwoNode sGreater self mergeTree)
                                             |> Replaced
-                                            |> tag
 
                             -- Finally, a SIMPLE CASE YAY.
                             Replaced replacement ->
                                 TwoNode lower self replacement
                                     |> Replaced
-                                    |> tag
 
                 ThreeNode lower left between right greater ->
                     if item < left then
-                        case doRemove item lower of
+                        case taggedRemove item lower of
                             NotFound ->
-                                tag NotFound
+                                NotFound
 
                             Merged mergeTree ->
                                 case between of
@@ -299,7 +292,6 @@ remove item tree =
                                                         gGreater
                                                     )
                                                     |> Replaced
-                                                    |> tag
 
                                             ThreeNode gLower gLeft gBetween gRight gGreater ->
                                                 ThreeNode
@@ -309,7 +301,6 @@ remove item tree =
                                                     gLeft
                                                     (TwoNode gBetween gRight gGreater)
                                                     |> Replaced
-                                                    |> tag
 
                                     ThreeNode bLower bLeft bBetween bRight bGreater ->
                                         ThreeNode
@@ -319,7 +310,6 @@ remove item tree =
                                             right
                                             greater
                                             |> Replaced
-                                            |> tag
 
                             Replaced replacement ->
                                 ThreeNode
@@ -329,14 +319,13 @@ remove item tree =
                                     right
                                     greater
                                     |> Replaced
-                                    |> tag
                     else if item == left then
                         let
                             nextLarger : comparable
                             nextLarger =
                                 findNextLarger item between
                         in
-                            case doRemove nextLarger between of
+                            case taggedRemove nextLarger between of
                                 NotFound ->
                                     Debug.crash "We know it's there, just remove it, you can't tell me it wasn't found."
 
@@ -362,7 +351,6 @@ remove item tree =
                                                         right
                                                         greater
                                                         |> Replaced
-                                                        |> tag
 
                                                 ThreeNode gLower gLeft gBetween gRight gGreater ->
                                                     ThreeNode
@@ -372,7 +360,6 @@ remove item tree =
                                                         gLeft
                                                         (TwoNode gBetween gRight gGreater)
                                                         |> Replaced
-                                                        |> tag
 
                                         ThreeNode lLower lLeft lBetween lRight lGreater ->
                                             ThreeNode
@@ -382,7 +369,6 @@ remove item tree =
                                                 right
                                                 greater
                                                 |> Replaced
-                                                |> tag
 
                                 Replaced replacement ->
                                     ThreeNode
@@ -392,11 +378,10 @@ remove item tree =
                                         right
                                         greater
                                         |> Replaced
-                                        |> tag
                     else if item < right then
-                        case doRemove item between of
+                        case taggedRemove item between of
                             NotFound ->
-                                tag NotFound
+                                NotFound
 
                             Merged mergeTree ->
                                 case lower of
@@ -420,7 +405,6 @@ remove item tree =
                                                     right
                                                     greater
                                                     |> Replaced
-                                                    |> tag
 
                                             ThreeNode gLower gLeft gBetween gRight gGreater ->
                                                 ThreeNode
@@ -430,7 +414,6 @@ remove item tree =
                                                     gLeft
                                                     (TwoNode gBetween gRight gGreater)
                                                     |> Replaced
-                                                    |> tag
 
                                     ThreeNode lLower lLeft lBetween lRight lGreater ->
                                         ThreeNode
@@ -440,7 +423,6 @@ remove item tree =
                                             right
                                             greater
                                             |> Replaced
-                                            |> tag
 
                             Replaced replacement ->
                                 ThreeNode
@@ -450,14 +432,13 @@ remove item tree =
                                     right
                                     greater
                                     |> Replaced
-                                    |> tag
                     else if item == right then
                         let
                             nextLarger : comparable
                             nextLarger =
                                 findNextLarger item greater
                         in
-                            case doRemove nextLarger greater of
+                            case taggedRemove nextLarger greater of
                                 NotFound ->
                                     Debug.crash "We know it's there, just remove it, you can't tell me it wasn't found."
 
@@ -483,7 +464,6 @@ remove item tree =
                                                         bSelf
                                                         (TwoNode bGreater nextLarger mergeTree)
                                                         |> Replaced
-                                                        |> tag
 
                                                 ThreeNode lLower lLeft lBetween lRight lGreater ->
                                                     ThreeNode
@@ -493,7 +473,6 @@ remove item tree =
                                                         bSelf
                                                         (TwoNode bGreater nextLarger mergeTree)
                                                         |> Replaced
-                                                        |> tag
 
                                         ThreeNode bLower bLeft bBetween bRight bGreater ->
                                             ThreeNode
@@ -503,7 +482,6 @@ remove item tree =
                                                 bRight
                                                 (TwoNode bGreater nextLarger mergeTree)
                                                 |> Replaced
-                                                |> tag
 
                                 Replaced replacement ->
                                     ThreeNode
@@ -513,11 +491,10 @@ remove item tree =
                                         nextLarger
                                         replacement
                                         |> Replaced
-                                        |> tag
                     else
-                        case doRemove item greater of
+                        case taggedRemove item greater of
                             NotFound ->
-                                tag NotFound
+                                NotFound
 
                             Merged mergeTree ->
                                 case between of
@@ -541,7 +518,6 @@ remove item tree =
                                                     bSelf
                                                     (TwoNode bGreater right mergeTree)
                                                     |> Replaced
-                                                    |> tag
 
                                             ThreeNode lLower lLeft lBetween lRight lGreater ->
                                                 ThreeNode
@@ -551,7 +527,6 @@ remove item tree =
                                                     bSelf
                                                     (TwoNode bGreater right mergeTree)
                                                     |> Replaced
-                                                    |> tag
 
                                     ThreeNode bLower bLeft bBetween bRight bGreater ->
                                         ThreeNode
@@ -561,7 +536,6 @@ remove item tree =
                                             bRight
                                             (TwoNode bGreater right mergeTree)
                                             |> Replaced
-                                            |> tag
 
                             Replaced replacement ->
                                 ThreeNode
@@ -571,9 +545,8 @@ remove item tree =
                                     right
                                     replacement
                                     |> Replaced
-                                    |> tag
     in
-        case doRemove (Debug.log "Attempting to remove " item) tree |> tag of
+        case taggedRemove (Debug.log "Attempting to remove " item) tree of
             NotFound ->
                 tree
 

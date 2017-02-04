@@ -66,6 +66,10 @@ performant manner -- in terms of folding. `map`, `filter`, `toList`, `size`,
 operations that may be implemented this way, with example implementations given
 below.
 
+## AA trees
+
+https://en.wikipedia.org/wiki/AA_tree
+
 ## AVL trees
 
 https://en.wikipedia.org/wiki/AVL_tree
@@ -76,7 +80,8 @@ https://en.wikipedia.org/wiki/2%E2%80%933_tree
 
 ## Fold-based operations
 
-This section is a quick overview of operations that can efficiently and often succinctly be implemented in terms of a fold.
+This section is a quick overview of operations that can efficiently and often
+succinctly be implemented in terms of a fold.
 
 ### toList
 
