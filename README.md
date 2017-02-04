@@ -1,16 +1,86 @@
 # Self-balancing binary search trees, in Elm.
 
-Self-balancing binary search trees are a node-based data structure that allow amortized worst case asymptotic `O (log n)` lookup, insertion and removal, as well as `O (n)` enumeration.
+[Self-balancing binary search trees](https://en.wikipedia.org/wiki/Self-balancing_binary_search_tree) are a node-based data structure that allow amortized worst case asymptotic `O (log n)` lookup, insertion and removal, as well as `O (n)` enumeration.
+
+## Basic tree operations
+
+> Type signatures in this section assume a Tree type has been imported *and*
+> exposed.
+
+There are only a few operation that need to be implemented on a tree to allow
+the construction of a more complete set of operations.
+
+### Construction
+
+First of all, we'll need some constructors.
+
+```elm
+Tree.empty : Tree comparable
+Tree.singleton : comparable -> Tree comparable
+```
+
+`empty` allows creation of the empty, *null* tree. This is useful as a target
+for folding or comparison to other nodes.
+
+Using the `singleton` constructor, we can create a tree for one single *comparable* value.
+
+### Manipulation and inspection
+
+Other than construction, we'll also need some operations to manipulate and
+inspect the tree.
+
+```elm
+Tree.insert : comparable -> Tree comparable -> Tree comparable
+Tree.remove : comparable -> Tree comparable -> Tree comparable
+Tree.member : comparable -> Tree comparable -> Bool
+```
+
+`insert` and `remove` speak for themselves: allowing the insertion into and
+removal of nodes from a tree, means we can actually store the exact data we
+want in a tree, and remove it once it is no longer required or once it needs to
+be removed. Of course, without a way of knowing whether an element is in the
+tree, we can't do much with it. So, we also need a `member` function that will
+check if a given `comparable` appears in a given `Tree`.
+
+### Folding
+
+```elm
+Tree.foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
+Tree.foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
+```
+
+Finally, there is the pair of folding functions `foldl` and `foldr` that allow
+enumerating the values in a tree, passing them into an accumulator and finally,
+returning this accumulated value. This accumulator could be any type of value,
+like a single value (for example, to sum all the elements of a tree), a list or even a tree. Note that this enumeration happens in `O (n)`.
+
+Using this last case -- folding a tree into another tree -- allows arbitrary
+types of manipulation. For example, removal of a node *could* be implemented as
+folding all values *except the node to be removed* into a new tree. Of course,
+that means the performance for removal would drop to `O (n)` rather than `O
+(log n)`, so that's not how it's implemented.
+
+However, a whole host of other operations could be defined -- in a rather
+performant manner -- in terms of folding. `map`, `filter`, `toList`, `size`,
+`union`, `intersect`, `partition` and `difference` are a few standard
+operations that may be implemented this way, with example implementations given
+below.
 
 ## AVL trees
 
-## Two Three trees
+https://en.wikipedia.org/wiki/AVL_tree
+
+## 2--3 trees
+
+https://en.wikipedia.org/wiki/2%E2%80%933_tree
 
 ## Fold-based operations
 
+This section is a quick overview of operations that can efficiently and often succinctly be implemented in terms of a fold.
+
 ### toList
 
-Convert tree to list in ascending order, using foldl.
+Convert tree to list in ascending order, using `foldl`.
 
 *Example implementation:*
 
