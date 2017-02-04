@@ -1,32 +1,52 @@
 module Tree.TwoThree exposing (..)
 
-{-| https://en.wikipedia.org/wiki/2%E2%80%933_tree
+{-| Two-Three trees
+
+https://en.wikipedia.org/wiki/2%E2%80%933_tree
+
+
+# Types
+@docs Tree
+
+# Creation
+@docs empty, singleton
+
+# Basic operations
+@docs InsertionResult, insert, DeletionResult, remove, member, size, foldl, foldr
+
+# Fold-based operations
+@docs map, filter, toList, fromList, union, remove, intersect, diff, partition
+
 -}
 
 import Debug
+import Function exposing (swirlr)
 
 
+{-|
+-}
 type Tree comparable
     = Empty
     | TwoNode (Tree comparable) comparable (Tree comparable)
     | ThreeNode (Tree comparable) comparable (Tree comparable) comparable (Tree comparable)
 
 
+{-|
+-}
 empty : Tree comparable
 empty =
     Empty
 
 
-isEmpty : Tree comparable -> Bool
-isEmpty tree =
-    tree == Empty
-
-
+{-|
+-}
 singleton : comparable -> Tree comparable
 singleton item =
     TwoNode empty item empty
 
 
+{-|
+-}
 type
     DeletionResult comparable
     -- NotFound means simply that the node could not be removed, for it does not exists
@@ -37,6 +57,8 @@ type
     | Replaced (Tree comparable)
 
 
+{-|
+-}
 remove : comparable -> Tree comparable -> Tree comparable
 remove item tree =
     let
@@ -562,17 +584,16 @@ remove item tree =
                 newTree
 
 
+{-|
+-}
 type InsertionResult comparable
     = Consumed (Tree comparable)
     | Pushed (Tree comparable) comparable (Tree comparable)
     | AlreadyExists
 
 
-fromList : List comparable -> Tree comparable
-fromList =
-    List.foldl insert empty
-
-
+{-|
+-}
 insert : comparable -> Tree comparable -> Tree comparable
 insert item tree =
     let
@@ -715,3 +736,168 @@ insert item tree =
 
             Pushed smaller self higher ->
                 TwoNode smaller self higher
+
+
+{-|
+-}
+member : comparable -> Tree comparable -> Bool
+member item tree =
+    case tree of
+        Empty ->
+            False
+
+        TwoNode lower self greater ->
+            if item < self then
+                member item lower
+            else if item == self then
+                True
+            else
+                member item greater
+
+        ThreeNode lower left between right greater ->
+            if item < left then
+                member item lower
+            else if item == left then
+                True
+            else if item < right then
+                member item between
+            else if item == right then
+                True
+            else
+                member item greater
+
+
+{-|
+-}
+foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
+foldl operation acc tree =
+    case tree of
+        Empty ->
+            acc
+
+        TwoNode lower self greater ->
+            foldl operation acc lower
+                |> operation self
+                |> swirlr foldl greater operation
+
+        ThreeNode lower left between right greater ->
+            foldl operation acc lower
+                |> operation left
+                |> swirlr foldl between operation
+                |> operation right
+                |> swirlr foldl greater operation
+
+
+{-|
+-}
+foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
+foldr operation acc tree =
+    case tree of
+        Empty ->
+            acc
+
+        TwoNode lower self greater ->
+            foldl operation acc greater
+                |> operation self
+                |> swirlr foldl lower operation
+
+        ThreeNode lower left between right greater ->
+            foldl operation acc greater
+                |> operation left
+                |> swirlr foldl between operation
+                |> operation right
+                |> swirlr foldl lower operation
+
+
+
+-- Fold-based operations
+
+
+{-| Convert tree to list in ascending order, using foldl.
+-}
+toList : Tree comparable -> List comparable
+toList =
+    foldl (::) []
+
+
+{-| Create tree from list by folding over the list and inserting into an
+initially empty tree.
+-}
+fromList : List comparable -> Tree comparable
+fromList =
+    List.foldl insert empty
+
+
+{-| Foldl over the list and incrementing an accumulator by one for each value
+that passes through the accumulator operation.
+-}
+size : Tree comparable -> Int
+size =
+    foldl (\_ acc -> acc + 1) 0
+
+
+{-| Create a new set with elements that match the predicate.
+-}
+filter : (comparable -> Bool) -> Tree comparable -> Tree comparable
+filter predicate =
+    foldl
+        (\item ->
+            if predicate item then
+                insert item
+            else
+                identity
+        )
+        empty
+
+
+{-| Union is implemented by folding over the second list and inserting it into
+the first list.
+-}
+union : Tree comparable -> Tree comparable -> Tree comparable
+union =
+    foldl insert
+
+
+{-| Tree intersection creates a new Tree containing only those values found in
+both trees. This is implemented by filtering the right-hand set, only keeping
+values found in the left-hand set.
+-}
+intersect : Tree comparable -> Tree comparable -> Tree comparable
+intersect left =
+    filter (flip member left)
+
+
+{-| The differences between two trees is, in Elm land, defined as the elements
+of the left tree that do not exists in the right tree. As such, this is
+implemented by filtering the left tree for values that do not exist in the
+right set.
+-}
+diff : Tree comparable -> Tree comparable -> Tree comparable
+diff left right =
+    filter (not << flip member right) left
+
+
+{-| Similar to filtering, this does not throw away the values that do not match
+the predicate, but creating a second tree from those values. The resulting
+trees are then returned as a tuple.
+-}
+partition : (comparable -> Bool) -> Tree comparable -> ( Tree comparable, Tree comparable )
+partition predicate =
+    foldl
+        (\item ->
+            if predicate item then
+                Tuple.mapFirst <| insert item
+            else
+                Tuple.mapSecond <| insert item
+        )
+        ( empty, empty )
+
+
+{-| Fold over the tree, executing the specified operation on each value, and
+accumulating these values into a new tree.
+-}
+map : (comparable -> comparable2) -> Tree comparable -> Tree comparable2
+map operator =
+    foldl
+        (insert << operator)
+        empty
