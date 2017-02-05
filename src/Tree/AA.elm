@@ -1,24 +1,51 @@
 module Tree.AA exposing (..)
 
+{-|
+
+# Types
+@docs Tree
+
+# Creation
+@docs empty, singleton
+
+# Basic operations
+@docs insert, remove, member, size, foldl, foldr
+
+# AA tree operations
+@docs unsafeMinimum, unsafeMaximum, skew, split, skewRight, skewRightRight, splitRight, rebalance, decreaseLevel, getLevel, setLevel, mapRight
+
+# Fold-based operations
+@docs map, filter, toList, fromList, union, remove, intersect, diff, partition
+
+-}
+
 import Debug
 import Function exposing (swirlr)
 
 
+{-|
+-}
 type Tree comparable
     = Empty
     | Node Int (Tree comparable) comparable (Tree comparable)
 
 
+{-|
+-}
 empty : Tree comparable
 empty =
     Empty
 
 
+{-|
+-}
 singleton : comparable -> Tree comparable
 singleton item =
     Node 1 empty item empty
 
 
+{-|
+-}
 insert : comparable -> Tree comparable -> Tree comparable
 insert item tree =
     let
@@ -55,11 +82,53 @@ insert item tree =
                         |> fixup
 
 
+{-|
+-}
 remove : comparable -> Tree comparable -> Tree comparable
 remove item tree =
-    tree
+    case tree of
+        Empty ->
+            Empty
+
+        Node level left self right ->
+            if item < self then
+                Node level (remove item left) self right
+            else if item == self then
+                case ( left, right ) of
+                    ( Empty, Empty ) ->
+                        Empty
+
+                    ( Empty, _ ) ->
+                        let
+                            successor : comparable
+                            successor =
+                                unsafeMinimum right
+
+                            newRight : Tree comparable
+                            newRight =
+                                remove successor right
+                        in
+                            Node level left successor newRight
+                                |> rebalance
+
+                    ( _, _ ) ->
+                        let
+                            predecessor : comparable
+                            predecessor =
+                                unsafeMaximum left
+
+                            newLeft : Tree comparable
+                            newLeft =
+                                remove predecessor left
+                        in
+                            Node level newLeft predecessor right
+                                |> rebalance
+            else
+                Node level left self (remove item right)
 
 
+{-|
+-}
 member : comparable -> Tree comparable -> Bool
 member item tree =
     case tree of
@@ -75,6 +144,8 @@ member item tree =
                 member item right
 
 
+{-|
+-}
 foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
 foldl operator acc tree =
     case tree of
@@ -87,6 +158,8 @@ foldl operator acc tree =
                 |> swirlr foldl right operator
 
 
+{-|
+-}
 foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
 foldr operator acc tree =
     case tree of
@@ -103,6 +176,38 @@ foldr operator acc tree =
 -- Internal functions
 
 
+{-|
+-}
+unsafeMinimum : Tree comparable -> comparable
+unsafeMinimum tree =
+    case tree of
+        Empty ->
+            Debug.crash "Can't get minimal value of empty tree."
+
+        Node _ Empty item _ ->
+            item
+
+        Node _ left _ _ ->
+            unsafeMinimum left
+
+
+{-|
+-}
+unsafeMaximum : Tree comparable -> comparable
+unsafeMaximum tree =
+    case tree of
+        Empty ->
+            Debug.crash "Can't get maximal value of empty tree."
+
+        Node _ _ item Empty ->
+            item
+
+        Node _ _ _ right ->
+            unsafeMaximum right
+
+
+{-|
+-}
 getLevel : Tree comparable -> Int
 getLevel tree =
     case tree of
@@ -113,6 +218,8 @@ getLevel tree =
             level
 
 
+{-|
+-}
 skew : Tree comparable -> Tree comparable
 skew tree =
     case tree of
@@ -127,6 +234,8 @@ skew tree =
             tree
 
 
+{-|
+-}
 split : Tree comparable -> Tree comparable
 split tree =
     case tree of
@@ -142,6 +251,94 @@ split tree =
 
         _ ->
             tree
+
+
+{-|
+-}
+mapRight : (Tree comparable -> Tree comparable) -> Tree comparable -> Tree comparable
+mapRight op tree =
+    case tree of
+        Empty ->
+            Empty
+
+        Node level left self right ->
+            Node level left self (op right)
+
+
+{-|
+-}
+skewRight : Tree comparable -> Tree comparable
+skewRight =
+    mapRight skew
+
+
+{-|
+-}
+splitRight : Tree comparable -> Tree comparable
+splitRight =
+    mapRight split
+
+
+{-|
+-}
+skewRightRight : Tree comparable -> Tree comparable
+skewRightRight =
+    mapRight skewRight
+
+
+{-|
+-}
+setLevel : Int -> Tree comparable -> Tree comparable
+setLevel level tree =
+    case tree of
+        Empty ->
+            Empty
+
+        Node _ left self right ->
+            Node level left self right
+
+
+{-|
+-}
+decreaseLevel : Tree comparable -> Tree comparable
+decreaseLevel tree =
+    case tree of
+        Empty ->
+            Empty
+
+        Node level left self Empty ->
+            let
+                shouldBe =
+                    getLevel left + 1
+            in
+                if level > shouldBe then
+                    Node shouldBe left self Empty
+                else
+                    tree
+
+        Node level left self right ->
+            let
+                shouldBe =
+                    1 + min (getLevel left) (getLevel right)
+            in
+                if level > shouldBe then
+                    let
+                        newRight =
+                            if getLevel right > shouldBe then
+                                setLevel shouldBe right
+                            else
+                                right
+                    in
+                        Node shouldBe left self newRight
+                else
+                    tree
+
+
+{-|
+-}
+rebalance : Tree comparable -> Tree comparable
+rebalance =
+    decreaseLevel >> skew >> skewRight >> skewRightRight >> split >> splitRight
 
 
 
