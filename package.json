@@ -1,6 +1,7 @@
 {
   "dependencies": {
-    "elm": "^0.18.0"
+    "elm": "^0.18.0",
+    "elm-test": "^0.18.2"
   },
   "scripts": {
     "doc": "elm-doc . --output docs --exclude 'AVL,TwoThree'"

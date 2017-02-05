@@ -17,10 +17,33 @@ https://en.wikipedia.org/wiki/2%E2%80%933_tree
 # Fold-based operations
 @docs map, filter, toList, fromList, union, remove, intersect, diff, partition
 
+# Debugging
+@docs debugMode, trace
+
 -}
 
 import Debug
 import Function exposing (swirlr)
+
+
+--
+
+
+{-|
+-}
+debugMode : Bool
+debugMode =
+    False
+
+
+{-|
+-}
+trace : String -> a -> a
+trace msg =
+    if debugMode then
+        Debug.log msg
+    else
+        identity
 
 
 {-|
@@ -93,14 +116,14 @@ remove item tree =
                                 ThreeNode _ left _ right _ ->
                                     "Replaced by node with left: " ++ toString left ++ " and right: " ++ toString right
             in
-                Debug.log logString result
+                trace logString result
 
         findNextLarger : comparable -> Tree comparable -> comparable
         findNextLarger item tree =
             let
                 tag : comparable -> comparable
                 tag =
-                    Debug.log "Removing an internal node is hard, so substituting for the next larger value."
+                    trace "Removing an internal node is hard, so substituting for the next larger value."
             in
                 case tree of
                     Empty ->
@@ -546,7 +569,7 @@ remove item tree =
                                     replacement
                                     |> Replaced
     in
-        case taggedRemove (Debug.log "Attempting to remove " item) tree of
+        case taggedRemove (trace "Attempting to remove " item) tree of
             NotFound ->
                 tree
 
