@@ -47,6 +47,8 @@ import Function exposing (swirlr)
 {-| A node in an AA tree can be either Empty, a branch node with one or two
 child-trees, or a leaf-node. A leaf-node is represented as a branch-node with
 both branch-points left empty.
+
+Additionally, nodes hold an extra Int keeping track of the level.
 -}
 type Tree comparable
     = Empty
@@ -215,7 +217,9 @@ foldr operator acc tree =
 -- Internal functions
 
 
-{-|
+{-| Finds the minimal value in the provided tree. Crashes when called on an
+Empty tree -- meant for internal use within delete where its used to find the
+predecessor from an *internal* node, hence guaranteeing safety.
 -}
 unsafeMinimum : Tree comparable -> comparable
 unsafeMinimum tree =
@@ -230,7 +234,9 @@ unsafeMinimum tree =
             unsafeMinimum left
 
 
-{-|
+{-| Finds the maximal value in the provided tree. Crashes when called on an
+Empty tree -- meant for internal use within delete where its used to find the
+successor from an *internal* node, hence guaranteeing safety.
 -}
 unsafeMaximum : Tree comparable -> comparable
 unsafeMaximum tree =
@@ -245,7 +251,8 @@ unsafeMaximum tree =
             unsafeMaximum right
 
 
-{-|
+{-| Get the level of a node in a tree. For an Empty tree, this is always 0. For
+every other node, this is a piece of information kept within the node.
 -}
 getLevel : Tree comparable -> Int
 getLevel tree =
@@ -257,7 +264,10 @@ getLevel tree =
             level
 
 
-{-|
+{-| Skewing is a right rotation to replace a subtree containing a
+left-horizontal link with one containing a right horizontal link.
+
+![Courtesy of wikipedia](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/AA_Tree_Skew2.svg/560px-AA_Tree_Skew2.svg.png)
 -}
 skew : Tree comparable -> Tree comparable
 skew tree =
@@ -273,7 +283,11 @@ skew tree =
             tree
 
 
-{-|
+{-| Split is a left rotation and level increase to replace a subtree containing
+two or more consecutive right horizontal links with one containing two fewer
+consecutive right horizontal links.
+
+![Courtesy of wikipedia](https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/AA_Tree_Split2.svg/510px-AA_Tree_Split2.svg.png)
 -}
 split : Tree comparable -> Tree comparable
 split tree =
@@ -292,7 +306,9 @@ split tree =
             tree
 
 
-{-|
+{-| Executes the provided operation on the right subtree and return the tree
+including the mapped result. Helper function of the skew/split operations
+required for rebalancing after removal.
 -}
 mapRight : (Tree comparable -> Tree comparable) -> Tree comparable -> Tree comparable
 mapRight op tree =
@@ -304,7 +320,7 @@ mapRight op tree =
             Node level left self (op right)
 
 
-{-|
+{-| Sets the level in the provided tree to the provided value.
 -}
 setLevel : Int -> Tree comparable -> Tree comparable
 setLevel level tree =
@@ -316,7 +332,8 @@ setLevel level tree =
             Node level left self right
 
 
-{-|
+{-| Decrease the level in the tree and subnodes to restore the AA invariants,
+if required.
 -}
 decreaseLevel : Tree comparable -> Tree comparable
 decreaseLevel tree =
@@ -352,7 +369,12 @@ decreaseLevel tree =
                     tree
 
 
-{-|
+{-| Rebalance the tree. This is a three-step process:
+
+- Decrease the level
+- Skew the tree
+- Split the tree
+
 -}
 rebalance : Tree comparable -> Tree comparable
 rebalance =
