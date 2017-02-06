@@ -1,6 +1,17 @@
 module Tree.AVL exposing (..)
 
-{-| AVL Trees are [..]
+{-| AVL trees are the earliest example of self-balancing binary search trees.
+
+An AVL tree upholds only a single invariant:
+
+> The difference of maximal heights between the left- and righthand sides of
+> every node is, for every internal node in the tree, either -1, 0 or 1.
+
+This invariant is maintained by rebalancing the tree after each modification
+(insertion or removal). Rebalancing, here, is implemented using one or two
+rotations for every internal node while the stack unwinds.
+
+![Tree rotations, courtesy of wikipedia](https://upload.wikimedia.org/wikipedia/commons/3/31/Tree_rotation_animation_250x250.gif)
 
 # Types
 @docs Tree
@@ -223,7 +234,6 @@ height set =
 
 {-| Rotate a tree to the left (for balancing).
 
-![Example from wikipedia](https://www.brianthicks.com/images/sets/Node_rotation_animation_250x250.gif)
 -}
 rotateLeft : Tree comparable -> Tree comparable
 rotateLeft set =
@@ -263,6 +273,14 @@ heightDiff set =
 
 
 {-| Rebalances a tree (if it is, in fact, unbalanced).
+
+If a tree becomes unbalanced by |2|, this restores the balance by rotating and
+-- if a child is unbalanced in the opposite direction -- rotating the child in
+the opposite direction.
+
+For more information on how this works, please refer to [Brian Hick's excellent
+series](https://www.brianthicks.com/post/2016/11/27/functional-sets-part-3-balancing/)
+on implementing AVL trees in Elm.
 -}
 balance : Tree comparable -> Tree comparable
 balance set =

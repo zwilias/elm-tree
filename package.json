@@ -4,6 +4,7 @@
     "elm-test": "^0.18.2"
   },
   "scripts": {
-    "doc": "elm-doc . --output docs --exclude 'AVL,TwoThree'"
+    "doc": "elm-doc . --output docs --exclude 'AVL,TwoThree,AA'",
+    "test": "elm test"
   }
 }

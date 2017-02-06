@@ -2,6 +2,27 @@ module Tree.AA exposing (..)
 
 {-|
 
+AA trees are a variation of the red-black tree, where "red" nodes can only be
+added on the right-hand side. This results in a simulation of 2-3 trees,
+whereas red-black trees could be considered a simulation or 2-3-4 trees.
+
+Due to the stricter invariant, maintenance operations needed to keep the tree
+balanced are quite a bit simpler than they are for regular red-black trees.
+
+Five invariants hold for AA trees:
+
+1. The level of every leaf node is one.
+2. The level of every left child is exactly one less than that of its parent.
+3. The level of every right child is equal to or one less than that of its
+parent.
+4. The level of every right grandchild is strictly less than that of its
+grandparent.
+5. Every node of level greater than one has two children.
+
+These invariants are maintained by skewing and splitting the tree after
+insertion and deletion, as well as updating the levels after deletion of
+internal nodes.
+
 # Types
 @docs Tree
 
@@ -12,7 +33,7 @@ module Tree.AA exposing (..)
 @docs insert, remove, member, size, foldl, foldr
 
 # AA tree operations
-@docs unsafeMinimum, unsafeMaximum, skew, split, skewRight, skewRightRight, splitRight, rebalance, decreaseLevel, getLevel, setLevel, mapRight
+@docs unsafeMinimum, unsafeMaximum, skew, split, rebalance, decreaseLevel, getLevel, setLevel, mapRight
 
 # Fold-based operations
 @docs map, filter, toList, fromList, union, remove, intersect, diff, partition
@@ -23,28 +44,41 @@ import Debug
 import Function exposing (swirlr)
 
 
-{-|
+{-| A node in an AA tree can be either Empty, a branch node with one or two
+child-trees, or a leaf-node. A leaf-node is represented as a branch-node with
+both branch-points left empty.
 -}
 type Tree comparable
     = Empty
     | Node Int (Tree comparable) comparable (Tree comparable)
 
 
-{-|
+{-| Constructs an empty tree.
 -}
 empty : Tree comparable
 empty =
     Empty
 
 
-{-|
+{-| Constructs a tree with one leaf holding the provided value.
 -}
 singleton : comparable -> Tree comparable
 singleton item =
     Node 1 empty item empty
 
 
-{-|
+{-| Insertion in an AA tree is quite simple:
+
+- Find the insertion point
+- Replace that empty node by a singleton
+- Fixup:
+
+    - `skew` if required
+    - `split` if required
+
+Both `skew` and `split` are able to decide whether or not they need to do
+anything, so calling them after every insertion is safe and guarantees the
+invariants to hold.
 -}
 insert : comparable -> Tree comparable -> Tree comparable
 insert item tree =
@@ -82,7 +116,12 @@ insert item tree =
                         |> fixup
 
 
-{-|
+{-| Removal from AA trees works as follows:
+
+- Recursively locate the node to be removed.
+- If it's an internal node, substitute for its successor or predecessor.
+- If it's leaf-node, replace by empty.
+- While unwinding the stack, `rebalance` - fixing up levels and balance by skewing and splitting.
 -}
 remove : comparable -> Tree comparable -> Tree comparable
 remove item tree =
@@ -92,7 +131,7 @@ remove item tree =
 
         Node level left self right ->
             if item < self then
-                Node level (remove item left) self right
+                Node level (remove item left) self right |> rebalance
             else if item == self then
                 case ( left, right ) of
                     ( Empty, Empty ) ->
@@ -124,10 +163,10 @@ remove item tree =
                             Node level newLeft predecessor right
                                 |> rebalance
             else
-                Node level left self (remove item right)
+                Node level left self (remove item right) |> rebalance
 
 
-{-|
+{-| Check if an item is a member of a tree, recursively.
 -}
 member : comparable -> Tree comparable -> Bool
 member item tree =
@@ -144,7 +183,7 @@ member item tree =
                 member item right
 
 
-{-|
+{-| Fold over the values in the tree, left to right, strictly ascending.
 -}
 foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
 foldl operator acc tree =
@@ -158,7 +197,7 @@ foldl operator acc tree =
                 |> swirlr foldl right operator
 
 
-{-|
+{-| Fold over the values in the tree, right to left, strictly descending.
 -}
 foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
 foldr operator acc tree =
@@ -267,27 +306,6 @@ mapRight op tree =
 
 {-|
 -}
-skewRight : Tree comparable -> Tree comparable
-skewRight =
-    mapRight skew
-
-
-{-|
--}
-splitRight : Tree comparable -> Tree comparable
-splitRight =
-    mapRight split
-
-
-{-|
--}
-skewRightRight : Tree comparable -> Tree comparable
-skewRightRight =
-    mapRight skewRight
-
-
-{-|
--}
 setLevel : Int -> Tree comparable -> Tree comparable
 setLevel level tree =
     case tree of
@@ -338,7 +356,16 @@ decreaseLevel tree =
 -}
 rebalance : Tree comparable -> Tree comparable
 rebalance =
-    decreaseLevel >> skew >> skewRight >> skewRightRight >> split >> splitRight
+    let
+        skewTree : Tree comparable -> Tree comparable
+        skewTree =
+            skew >> mapRight skew >> mapRight (mapRight skew)
+
+        splitTree : Tree comparable -> Tree comparable
+        splitTree =
+            split >> mapRight split
+    in
+        decreaseLevel >> skewTree >> splitTree
 
 
 
