@@ -1,9 +1,10 @@
 module Tree.AATest exposing (..)
 
 import Test exposing (..)
-import Expect exposing (Expectation, pass, fail)
+import Expect
 import Tree.AA as Tree exposing (..)
 import Fuzz exposing (list, int)
+import Util
 
 
 all : Test
@@ -198,10 +199,16 @@ testInsertion checker =
 
 testRemoval : (Tree Int -> Bool) -> Test
 testRemoval checker =
-    fuzz2 (list int) (list int) "Invariant holds during removal" <|
-        \members toBeDeleted ->
-            members
-                |> Tree.fromList
-                |> (\tree -> List.foldl Tree.remove tree members)
-                |> checker
-                |> Expect.true "Invariant did not hold"
+    fuzz Util.listAndSublist "Invariant holds during removal" <|
+        \( members, remove ) ->
+            let
+                removeItems : Tree Int -> Tree Int
+                removeItems tree =
+                    remove
+                        |> List.foldl Tree.remove tree
+            in
+                members
+                    |> Tree.fromList
+                    |> removeItems
+                    |> checker
+                    |> Expect.true "Invariant did not hold"

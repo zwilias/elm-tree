@@ -341,32 +341,21 @@ decreaseLevel tree =
         Empty ->
             Empty
 
-        Node level left self Empty ->
-            let
-                shouldBe =
-                    getLevel left + 1
-            in
-                if level > shouldBe then
-                    Node shouldBe left self Empty
-                else
-                    tree
-
         Node level left self right ->
-            let
-                shouldBe =
-                    1 + min (getLevel left) (getLevel right)
-            in
-                if level > shouldBe then
-                    let
-                        newRight =
-                            if getLevel right > shouldBe then
-                                setLevel shouldBe right
-                            else
-                                right
-                    in
-                        Node shouldBe left self newRight
-                else
-                    tree
+            if level > getLevel left + 1 || level > getLevel right + 1 then
+                let
+                    shouldBe =
+                        level - 1
+
+                    newRight =
+                        if getLevel right > shouldBe then
+                            setLevel shouldBe right
+                        else
+                            right
+                in
+                    Node shouldBe left self newRight
+            else
+                tree
 
 
 {-| Rebalance the tree. This is a three-step process:
