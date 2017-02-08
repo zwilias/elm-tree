@@ -1,9 +1,22 @@
 module Tree.TwoThree exposing (..)
 
-{-| Two-Three trees
+{-| 2-3 trees are B-trees of order 3 (using Knuth's definition of order as
+the maximum amount of children a node may have). Rather than having exactly one
+left and one right hand branch - as regular BST's do, 2-3 trees can have nodes
+with *2* values and *3* children. As a result, a 2-3 tree can be perfectly
+height balanced over all its nodes.
 
-https://en.wikipedia.org/wiki/2%E2%80%933_tree
+In fact, that is the exact invariant that holds for 2-3 trees:
 
+> All children of each node *always* have the same height.
+
+Conceptually, 2-3 trees are much simpler than AVL or AA trees:
+
+- No rotation required
+- Balance is maintained by absorption ro remove unwanted nodes and splitting to
+eliminate 4-nodes
+
+Implementation is hairy, though.
 
 # Types
 @docs Tree
@@ -29,14 +42,15 @@ import Function exposing (swirlr)
 --
 
 
-{-|
+{-| Whether or not debug mode is enabled. This is mostly for convenience,
+allowing the deletion algorithm to log every step it goes through.
 -}
 debugMode : Bool
 debugMode =
     False
 
 
-{-|
+{-| `debugMode` aware wrapper for `Debug.log`
 -}
 trace : String -> a -> a
 trace msg =
@@ -46,7 +60,12 @@ trace msg =
         identity
 
 
-{-|
+{-| A two-three tree has nodes that have either one value and *two* children,
+or two values and *three* children. Hence, the name. Of particular note is how
+this configuration allows for a perfectly balanced tree, at the cost of having
+to deal with slightly more complicated rebalancing operations when deleting
+nodes. As with all our trees so far, we include an explicit sentinel node to
+mark empty branch-points (which denote leaf nodes)
 -}
 type Tree comparable
     = Empty
@@ -54,21 +73,22 @@ type Tree comparable
     | ThreeNode (Tree comparable) comparable (Tree comparable) comparable (Tree comparable)
 
 
-{-|
+{-| Creates an empty tree.
 -}
 empty : Tree comparable
 empty =
     Empty
 
 
-{-|
+{-| Creates a singleton tree with the provided value.
 -}
 singleton : comparable -> Tree comparable
 singleton item =
     TwoNode empty item empty
 
 
-{-|
+{-| A types used to handle the different cases that may arise during `remove`
+operations, and that need specific handling while unwinding the stack.
 -}
 type
     DeletionResult comparable
@@ -80,7 +100,20 @@ type
     | Replaced (Tree comparable)
 
 
-{-|
+{-| Remove a value from the tree.
+
+- In case it's a leaf-node, there are 2 options:
+    - Single-value leaf-node: this means the node is completely removed, hence
+    changing the depth of this branch. This might require changes further up
+    the tree in order to restore the 2-3 invariant of being perfectly height
+    balanced.
+    - Dual-value leaf-node: this is the easiest scenario - the leaf-node is
+    replaced by a single-value leaf-node. Done, and no further rebalancing
+    required.
+- In case it's an internal node, the value to be removed is swapped with its
+successor or predecessor and the algorithm is followed as if it were a
+leaf-node.
+- In case the value does not occur in the tree, nothing needs to happen.
 -}
 remove : comparable -> Tree comparable -> Tree comparable
 remove item tree =
@@ -580,7 +613,9 @@ remove item tree =
                 newTree
 
 
-{-|
+{-| Similar to the DeletionResult ADT, the InsertionResult ADT is used to keep
+track of operations down the tree, and handling them as required after
+insertion, in order to maintain the invariant.
 -}
 type InsertionResult comparable
     = Consumed (Tree comparable)
@@ -588,7 +623,8 @@ type InsertionResult comparable
     | AlreadyExists
 
 
-{-|
+{-| Insertion is, albeit conceptually simple, in practice fairly complex due to
+the many variations that need to be considered.
 -}
 insert : comparable -> Tree comparable -> Tree comparable
 insert item tree =
@@ -734,7 +770,7 @@ insert item tree =
                 TwoNode smaller self higher
 
 
-{-|
+{-| Recursively check if a given value is a member of the tree.
 -}
 member : comparable -> Tree comparable -> Bool
 member item tree =
@@ -763,7 +799,7 @@ member item tree =
                 member item greater
 
 
-{-|
+{-| Recursively fold over values in the tree, depth first, left to right.
 -}
 foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
 foldl operation acc tree =
@@ -784,7 +820,7 @@ foldl operation acc tree =
                 |> swirlr foldl greater operation
 
 
-{-|
+{-| Recursively fold over values in the tree, depth first, right to left.
 -}
 foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
 foldr operation acc tree =
