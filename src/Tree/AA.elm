@@ -50,23 +50,23 @@ both branch-points left empty.
 
 Additionally, nodes hold an extra Int keeping track of the level.
 -}
-type Tree comparable
+type Tree k v
     = Empty
-    | Node Int (Tree comparable) comparable (Tree comparable)
+    | Node Int (Tree k v) k v (Tree k v)
 
 
 {-| Constructs an empty tree.
 -}
-empty : Tree comparable
+empty : Tree k v
 empty =
     Empty
 
 
 {-| Constructs a tree with one leaf holding the provided value.
 -}
-singleton : comparable -> Tree comparable
-singleton item =
-    Node 1 empty item empty
+singleton : k -> v -> Tree k v
+singleton key value =
+    Node 1 empty key value empty
 
 
 {-| Insertion in an AA tree is quite simple:
@@ -82,37 +82,41 @@ Both `skew` and `split` are able to decide whether or not they need to do
 anything, so calling them after every insertion is safe and guarantees the
 invariants to hold.
 -}
-insert : comparable -> Tree comparable -> Tree comparable
-insert item tree =
+insert : comparable -> v -> Tree comparable v -> Tree comparable v
+insert key value tree =
     let
-        fixup : Tree comparable -> Tree comparable
+        fixup : Tree k v -> Tree k v
         fixup =
             skew >> split
     in
         case tree of
             Empty ->
-                singleton item
+                singleton key value
 
-            Node level left self right ->
-                if item < self then
+            Node level left selfk selfv right ->
+                if key < selfk then
                     Node
                         level
                         (insert
-                            item
+                            key
+                            value
                             left
                         )
-                        self
+                        selfk
+                        selfv
                         right
                         |> fixup
-                else if item == self then
+                else if key == selfk then
                     tree
                 else
                     Node
                         level
                         left
-                        self
+                        selfk
+                        selfv
                         (insert
-                            item
+                            key
+                            value
                             right
                         )
                         |> fixup
@@ -125,58 +129,56 @@ insert item tree =
 - If it's leaf-node, replace by empty.
 - While unwinding the stack, `rebalance` - fixing up levels and balance by skewing and splitting.
 -}
-remove : comparable -> Tree comparable -> Tree comparable
-remove item tree =
+remove : comparable -> Tree comparable v -> Tree comparable v
+remove key tree =
     case tree of
         Empty ->
             Empty
 
-        Node level left self right ->
-            if item < self then
-                Node level (remove item left) self right |> rebalance
-            else if item == self then
+        Node level left selfk selfv right ->
+            if key < selfk then
+                Node level (remove key left) selfk selfv right |> rebalance
+            else if key == selfk then
                 case ( left, right ) of
                     ( Empty, Empty ) ->
                         Empty
 
                     ( Empty, _ ) ->
                         let
-                            successor : comparable
-                            successor =
+                            ( successork, successorv ) =
                                 unsafeMinimum right
 
-                            newRight : Tree comparable
+                            newRight : Tree comparable v
                             newRight =
-                                remove successor right
+                                remove successork right
                         in
-                            Node level left successor newRight
+                            Node level left successork successorv newRight
                                 |> rebalance
 
                     ( _, _ ) ->
                         let
-                            predecessor : comparable
-                            predecessor =
+                            ( predecessork, predecessorv ) =
                                 unsafeMaximum left
 
-                            newLeft : Tree comparable
+                            newLeft : Tree comparable v
                             newLeft =
-                                remove predecessor left
+                                remove predecessork left
                         in
-                            Node level newLeft predecessor right
+                            Node level newLeft predecessork predecessorv right
                                 |> rebalance
             else
-                Node level left self (remove item right) |> rebalance
+                Node level left selfk selfv (remove key right) |> rebalance
 
 
 {-| Check if an item is a member of a tree, recursively.
 -}
-member : comparable -> Tree comparable -> Bool
+member : comparable -> Tree comparable v -> Bool
 member item tree =
     case tree of
         Empty ->
             False
 
-        Node _ left self right ->
+        Node _ left self _ right ->
             if item < self then
                 member item left
             else if item == self then
@@ -185,52 +187,48 @@ member item tree =
                 member item right
 
 
-{-| Fold over the values in the tree, left to right, strictly ascending.
--}
-foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
-foldl operator acc tree =
+foldl : (k -> v -> a -> a) -> a -> Tree k v -> a
+foldl op acc tree =
     case tree of
         Empty ->
             acc
 
-        Node _ left self right ->
-            foldl operator acc left
-                |> operator self
-                |> swirlr foldl right operator
+        Node _ left key val right ->
+            foldl op acc left
+                |> op key val
+                |> swirlr foldl right op
 
 
-{-| Fold over the values in the tree, right to left, strictly descending.
--}
-foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
-foldr operator acc tree =
+foldr : (k -> v -> a -> a) -> a -> Tree k v -> a
+foldr op acc tree =
     case tree of
         Empty ->
             acc
 
-        Node _ left self right ->
-            foldr operator acc right
-                |> operator self
-                |> swirlr foldr left operator
+        Node _ left key val right ->
+            foldr op acc right
+                |> op key val
+                |> swirlr foldr left op
 
 
 
 -- Internal functions
 
 
-{-| Finds the minimal value in the provided tree. Crashes when called on an
+{-| Finds the minimal key/value pair in the provided tree. Crashes when called on an
 Empty tree -- meant for internal use within delete where its used to find the
 predecessor from an *internal* node, hence guaranteeing safety.
 -}
-unsafeMinimum : Tree comparable -> comparable
+unsafeMinimum : Tree k v -> ( k, v )
 unsafeMinimum tree =
     case tree of
         Empty ->
             Debug.crash "Can't get minimal value of empty tree."
 
-        Node _ Empty item _ ->
-            item
+        Node _ Empty key value _ ->
+            ( key, value )
 
-        Node _ left _ _ ->
+        Node _ left _ _ _ ->
             unsafeMinimum left
 
 
@@ -238,29 +236,29 @@ unsafeMinimum tree =
 Empty tree -- meant for internal use within delete where its used to find the
 successor from an *internal* node, hence guaranteeing safety.
 -}
-unsafeMaximum : Tree comparable -> comparable
+unsafeMaximum : Tree k v -> ( k, v )
 unsafeMaximum tree =
     case tree of
         Empty ->
             Debug.crash "Can't get maximal value of empty tree."
 
-        Node _ _ item Empty ->
-            item
+        Node _ _ key value Empty ->
+            ( key, value )
 
-        Node _ _ _ right ->
+        Node _ _ _ _ right ->
             unsafeMaximum right
 
 
 {-| Get the level of a node in a tree. For an Empty tree, this is always 0. For
 every other node, this is a piece of information kept within the node.
 -}
-getLevel : Tree comparable -> Int
+getLevel : Tree k v -> Int
 getLevel tree =
     case tree of
         Empty ->
             0
 
-        Node level _ _ _ ->
+        Node level _ _ _ _ ->
             level
 
 
@@ -269,13 +267,13 @@ left-horizontal link with one containing a right horizontal link.
 
 ![Courtesy of wikipedia](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/AA_Tree_Skew2.svg/560px-AA_Tree_Skew2.svg.png)
 -}
-skew : Tree comparable -> Tree comparable
+skew : Tree k v -> Tree k v
 skew tree =
     case tree of
-        Node level (Node lLevel lLeft lSelf lRight) self right ->
+        Node level (Node lLevel lLeft lKey lVal lRight) key val right ->
             if level == lLevel then
-                Node level lRight self right
-                    |> Node level lLeft lSelf
+                Node level lRight key val right
+                    |> Node level lLeft lKey lVal
             else
                 tree
 
@@ -289,15 +287,16 @@ consecutive right horizontal links.
 
 ![Courtesy of wikipedia](https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/AA_Tree_Split2.svg/510px-AA_Tree_Split2.svg.png)
 -}
-split : Tree comparable -> Tree comparable
+split : Tree k v -> Tree k v
 split tree =
     case tree of
-        Node level left self (Node rLevel rLeft rSelf rRight) ->
+        Node level left key val (Node rLevel rLeft rKey rVal rRight) ->
             if level == rLevel && level == getLevel rRight then
                 Node
                     (level + 1)
-                    (Node level left self rLeft)
-                    rSelf
+                    (Node level left key val rLeft)
+                    rKey
+                    rVal
                     rRight
             else
                 tree
@@ -310,38 +309,38 @@ split tree =
 including the mapped result. Helper function of the skew/split operations
 required for rebalancing after removal.
 -}
-mapRight : (Tree comparable -> Tree comparable) -> Tree comparable -> Tree comparable
+mapRight : (Tree k v -> Tree k v) -> Tree k v -> Tree k v
 mapRight op tree =
     case tree of
         Empty ->
             Empty
 
-        Node level left self right ->
-            Node level left self (op right)
+        Node level left key value right ->
+            Node level left key value (op right)
 
 
 {-| Sets the level in the provided tree to the provided value.
 -}
-setLevel : Int -> Tree comparable -> Tree comparable
+setLevel : Int -> Tree k v -> Tree k v
 setLevel level tree =
     case tree of
         Empty ->
             Empty
 
-        Node _ left self right ->
-            Node level left self right
+        Node _ left key value right ->
+            Node level left key value right
 
 
 {-| Decrease the level in the tree and subnodes to restore the AA invariants,
 if required.
 -}
-decreaseLevel : Tree comparable -> Tree comparable
+decreaseLevel : Tree k v -> Tree k v
 decreaseLevel tree =
     case tree of
         Empty ->
             Empty
 
-        Node level left self right ->
+        Node level left key value right ->
             if level > getLevel left + 1 || level > getLevel right + 1 then
                 let
                     shouldBe =
@@ -353,7 +352,7 @@ decreaseLevel tree =
                         else
                             right
                 in
-                    Node shouldBe left self newRight
+                    Node shouldBe left key value newRight
             else
                 tree
 
@@ -365,14 +364,14 @@ decreaseLevel tree =
 - Split the tree
 
 -}
-rebalance : Tree comparable -> Tree comparable
+rebalance : Tree k v -> Tree k v
 rebalance =
     let
-        skewTree : Tree comparable -> Tree comparable
+        skewTree : Tree k v -> Tree k v
         skewTree =
             skew >> mapRight skew >> mapRight (mapRight skew)
 
-        splitTree : Tree comparable -> Tree comparable
+        splitTree : Tree k v -> Tree k v
         splitTree =
             split >> mapRight split
     in
@@ -385,89 +384,58 @@ rebalance =
 
 {-| Convert tree to list in ascending order, using foldl.
 -}
-toList : Tree comparable -> List comparable
-toList =
-    foldl (::) []
+keys : Tree k v -> List k
+keys =
+    foldr (\key val -> (::) key) []
+
+
+{-|
+-}
+values : Tree k v -> List v
+values =
+    foldr (\key val -> (::) val) []
 
 
 {-| Create tree from list by folding over the list and inserting into an
 initially empty tree.
 -}
-fromList : List comparable -> Tree comparable
+fromList : List ( comparable, v ) -> Tree comparable v
 fromList =
-    List.foldl insert empty
+    List.foldl (uncurry insert) empty
+
+
+{-| Tree to list of key-value pairs
+-}
+toList : Tree k v -> List ( k, v )
+toList =
+    foldr ((\k v -> (::) ( k, v ))) []
 
 
 {-| Foldl over the list and incrementing an accumulator by one for each value
 that passes through the accumulator operation.
 -}
-size : Tree comparable -> Int
+size : Tree k v -> Int
 size =
-    foldl (\_ acc -> acc + 1) 0
-
-
-{-| Fold over the tree, executing the specified operation on each value, and
-accumulating these values into a new tree.
--}
-map : (comparable -> comparable2) -> Tree comparable -> Tree comparable2
-map operator =
-    foldl
-        (insert << operator)
-        empty
-
-
-{-| Create a new set with elements that match the predicate.
--}
-filter : (comparable -> Bool) -> Tree comparable -> Tree comparable
-filter predicate =
-    foldl
-        (\item ->
-            if predicate item then
-                insert item
-            else
-                identity
-        )
-        empty
+    foldl (\_ _ acc -> acc + 1) 0
 
 
 {-| Union is implemented by folding over the second list and inserting it into
 the first list.
 -}
-union : Tree comparable -> Tree comparable -> Tree comparable
+union : Tree comparable v -> Tree comparable v -> Tree comparable v
 union =
     foldl insert
 
 
-{-| Tree intersection creates a new Tree containing only those values found in
-both trees. This is implemented by filtering the right-hand set, only keeping
-values found in the left-hand set.
+{-|
 -}
-intersect : Tree comparable -> Tree comparable -> Tree comparable
-intersect left =
-    filter (flip member left)
-
-
-{-| The differences between two trees is, in Elm land, defined as the elements
-of the left tree that do not exists in the right tree. As such, this is
-implemented by filtering the left tree for values that do not exist in the
-right set.
--}
-diff : Tree comparable -> Tree comparable -> Tree comparable
-diff left right =
-    filter (not << flip member right) left
-
-
-{-| Similar to filtering, this does not throw away the values that do not match
-the predicate, but creating a second tree from those values. The resulting
-trees are then returned as a tuple.
--}
-partition : (comparable -> Bool) -> Tree comparable -> ( Tree comparable, Tree comparable )
-partition predicate =
+filter : (comparable -> v -> Bool) -> Tree comparable v -> Tree comparable v
+filter predicate =
     foldl
-        (\item ->
-            if predicate item then
-                Tuple.mapFirst <| insert item
+        (\key val ->
+            if predicate key val then
+                insert key val
             else
-                Tuple.mapSecond <| insert item
+                identity
         )
-        ( empty, empty )
+        empty

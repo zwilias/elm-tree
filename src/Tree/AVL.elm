@@ -20,16 +20,14 @@ rotations for every internal node while the stack unwinds.
 @docs empty, singleton
 
 # Basic operations
-@docs insert, remove, member, size, foldl, foldr
+@docs insert, remove, update, member, get, size, foldl, foldr
 
 # Fold-based operations
-@docs map, filter, toList, fromList, union, remove, intersect, diff, partition
+@docs filter, fromList, toList, union, remove, keys, values
 
 # Internals
 @docs tree, rotateLeft, rotateRight, height, heightDiff, balance
 -}
-
-import Function exposing (swirlr)
 
 
 {-| A node in an avl tree is either a node with one key and zero, one or two
@@ -40,8 +38,8 @@ internal node, i.e. having all branch-points filled in by a non-empty node.
 The left branch of a node contains values smaller than the node's own value, the
 right branch contains values greater than the node's own value.
 -}
-type Tree comparable
-    = Node Int comparable (Tree comparable) (Tree comparable)
+type Tree k v
+    = Node Int k v (Tree k v) (Tree k v)
     | Empty
 
 
@@ -51,14 +49,14 @@ type Tree comparable
 
 {-| A singleton in an AVL tree is a Node with both branch-points empty.
 -}
-singleton : comparable -> Tree comparable
-singleton item =
-    Node 1 item empty empty
+singleton : comparable -> v -> Tree comparable v
+singleton key val =
+    Node 1 key val empty empty
 
 
 {-| An empty AVL tree is a single `Empty` node.
 -}
-empty : Tree comparable
+empty : Tree k v
 empty =
     Empty
 
@@ -75,17 +73,17 @@ branch-point, or not at all
 branch-point
 - Rebalance the tree, which might require some rotating.
 -}
-insert : comparable -> Tree comparable -> Tree comparable
-insert item set =
+insert : comparable -> v -> Tree comparable v -> Tree comparable v
+insert key value set =
     case set of
         Empty ->
-            singleton item
+            singleton key value
 
-        Node height head left right ->
-            if item < head then
-                tree head (insert item left) right |> balance
-            else if item > head then
-                tree head left (insert item right) |> balance
+        Node height head headVal left right ->
+            if key < head then
+                tree head headVal (insert key value left) right |> balance
+            else if key > head then
+                tree head headVal left (insert key value right) |> balance
             else
                 set
 
@@ -97,17 +95,17 @@ the node to be removed was a leaf-node).
 After the actual removal, the parent branches are rebalanced during the
 recursive bubble up, so as to maintain the AVL invariants.
 -}
-remove : comparable -> Tree comparable -> Tree comparable
-remove item set =
+remove : comparable -> Tree comparable v -> Tree comparable v
+remove key set =
     case set of
         Empty ->
             set
 
-        Node _ head left right ->
-            if item < head then
-                tree head (remove item left) right |> balance
-            else if item > head then
-                tree head left (remove item right) |> balance
+        Node _ head headVal left right ->
+            if key < head then
+                tree head headVal (remove key left) right |> balance
+            else if key > head then
+                tree head headVal left (remove key right) |> balance
             else
                 union left right
 
@@ -116,57 +114,96 @@ remove item set =
 selecting the most likely place to find the item to check for. As with other
 self-balancing binary trees, this can happen in `O (log n)`.
 -}
-member : comparable -> Tree comparable -> Bool
-member item set =
+member : comparable -> Tree comparable v -> Bool
+member key set =
     case set of
         Empty ->
             False
 
-        Node _ head left right ->
-            if item < head then
-                member item left
-            else if item > head then
-                member item right
+        Node _ head _ left right ->
+            if key < head then
+                member key left
+            else if key > head then
+                member key right
             else
                 True
+
+
+{-| Get returns the value associated with the key if it exists.
+-}
+get : comparable -> Tree comparable v -> Maybe v
+get key tree =
+    case tree of
+        Empty ->
+            Nothing
+
+        Node _ head value left right ->
+            if key < head then
+                get key left
+            else if key > head then
+                get key right
+            else
+                Just value
+
+
+{-| Update a value. This might be an actual update, or an deletion, or an
+insertion. Ewww.
+-}
+update : comparable -> (Maybe v -> Maybe v) -> Tree comparable v -> Tree comparable v
+update key getNewValue tree =
+    case tree of
+        Empty ->
+            case getNewValue Nothing of
+                Nothing ->
+                    Empty
+
+                Just value ->
+                    singleton key value
+
+        Node height head value left right ->
+            if key < head then
+                update key getNewValue left |> balance
+            else if key > head then
+                update key getNewValue right |> balance
+            else
+                case getNewValue (Just value) of
+                    Nothing ->
+                        union left right
+
+                    Just newValue ->
+                        Node height head newValue left right
 
 
 
 -- Folds
 
 
-{-| As with other trees, left-folding works by recursively folding over the
-left hand side, then the own value, then the right hand side. Since our initial
-node definition specified that all values contained in the left branch must be
-smaller than the node-value, and all values in the right branch must be greater
-than the node-value, this ensures values are folded over in strictly ascending
-order.
+{-|
 -}
-foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
-foldl operation acc set =
-    case set of
+foldl : (k -> v -> a -> a) -> a -> Tree k v -> a
+foldl op acc tree =
+    case tree of
         Empty ->
             acc
 
-        Node _ head left right ->
-            foldl operation acc left
-                |> operation head
-                |> swirlr foldl right operation
+        Node _ key val left right ->
+            foldl op acc left
+                |> op key val
+                |> (\acc -> foldl op acc right)
 
 
-{-| Simply the mirror of `foldl` -- rather than recursing left-hand first, fold
-right-hand first, which ensures the values are folded over in descending order.
+{-|
 -}
-foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
-foldr operation acc set =
-    case set of
+foldr : (k -> v -> a -> a) -> a -> Tree k v -> a
+foldr op acc tree =
+    case tree of
         Empty ->
             acc
 
-        Node _ head left right ->
-            foldr operation acc right
-                |> (\acc -> operation head acc)
-                |> (\acc -> foldr operation acc left)
+        Node _ key val left right ->
+            foldr op acc right
+                |> op key val
+                |> (\acc -> foldr op acc left)
 
 
 
@@ -190,8 +227,8 @@ customSingleton val =
 customSingleton 1 == < 1 . . >
 ```
 -}
-tree : comparable -> Tree comparable -> Tree comparable -> Tree comparable
-tree item left right =
+tree : k -> v -> Tree k v -> Tree k v -> Tree k v
+tree key value left right =
     let
         maxHeight : Int
         maxHeight =
@@ -202,7 +239,8 @@ tree item left right =
     in
         Node
             maxHeight
-            item
+            key
+            value
             left
             right
 
@@ -222,24 +260,24 @@ Tree.fromList [ 1, 2, 3 ]
     |> Tree.height == 2
 ```
 -}
-height : Tree comparable -> Int
+height : Tree k v -> Int
 height set =
     case set of
         Empty ->
             0
 
-        Node height _ _ _ ->
+        Node height _ _ _ _ ->
             height
 
 
 {-| Rotate a tree to the left (for balancing).
 
 -}
-rotateLeft : Tree comparable -> Tree comparable
+rotateLeft : Tree k v -> Tree k v
 rotateLeft set =
     case set of
-        Node _ root less (Node _ pivot between greater) ->
-            tree pivot (tree root less between) greater
+        Node _ root rootVal less (Node _ pivot pivotVal between greater) ->
+            tree pivot pivotVal (tree root rootVal less between) greater
 
         _ ->
             set
@@ -247,11 +285,11 @@ rotateLeft set =
 
 {-| Inversely, rotate a tree to the right (for balancing).
 -}
-rotateRight : Tree comparable -> Tree comparable
+rotateRight : Tree k v -> Tree k v
 rotateRight set =
     case set of
-        Node _ root (Node _ pivot less between) greater ->
-            tree pivot less (tree root between greater)
+        Node _ root rootVal (Node _ pivot pivotVal less between) greater ->
+            tree pivot pivotVal less (tree root rootVal between greater)
 
         _ ->
             set
@@ -262,13 +300,13 @@ rotateRight set =
 A *valid* AVL tree has a maximal height difference of |1| over its branches,
 which allows checking if a random element is in the tree in `O (log n)`.
 -}
-heightDiff : Tree comparable -> Int
+heightDiff : Tree k v -> Int
 heightDiff set =
     case set of
         Empty ->
             0
 
-        Node _ _ left right ->
+        Node _ _ _ left right ->
             height right - height left
 
 
@@ -282,22 +320,22 @@ For more information on how this works, please refer to [Brian Hick's excellent
 series](https://www.brianthicks.com/post/2016/11/27/functional-sets-part-3-balancing/)
 on implementing AVL trees in Elm.
 -}
-balance : Tree comparable -> Tree comparable
+balance : Tree k v -> Tree k v
 balance set =
     case set of
         Empty ->
             set
 
-        Node _ head left right ->
+        Node _ head hVal left right ->
             if heightDiff set == -2 && heightDiff left > 0 then
                 -- Node leaning to the left with subtree leaning to the right
-                tree head (rotateLeft left) right |> rotateRight
+                tree head hVal (rotateLeft left) right |> rotateRight
             else if heightDiff set < -1 then
                 -- Node leaning to the left
                 rotateRight set
             else if heightDiff set == 2 && heightDiff right < 0 then
                 -- Node leaning to the right with subtree leaning left
-                tree head left (rotateRight right) |> rotateLeft
+                tree head hVal left (rotateRight right) |> rotateLeft
             else if heightDiff set > 1 then
                 -- Node leaning to the right
                 rotateLeft set
@@ -312,89 +350,58 @@ balance set =
 
 {-| Convert tree to list in ascending order, using foldl.
 -}
-toList : Tree comparable -> List comparable
-toList =
-    foldl (::) []
+keys : Tree k v -> List k
+keys =
+    foldr (\key val -> (::) key) []
+
+
+{-|
+-}
+values : Tree k v -> List v
+values =
+    foldr (\key val -> (::) val) []
 
 
 {-| Create tree from list by folding over the list and inserting into an
 initially empty tree.
 -}
-fromList : List comparable -> Tree comparable
+fromList : List ( comparable, v ) -> Tree comparable v
 fromList =
-    List.foldl insert empty
+    List.foldl (uncurry insert) empty
+
+
+{-| Tree to list of key-value pairs
+-}
+toList : Tree k v -> List ( k, v )
+toList =
+    foldr ((\k v -> (::) ( k, v ))) []
 
 
 {-| Foldl over the list and incrementing an accumulator by one for each value
 that passes through the accumulator operation.
 -}
-size : Tree comparable -> Int
+size : Tree k v -> Int
 size =
-    foldl (\_ acc -> acc + 1) 0
-
-
-{-| Fold over the tree, executing the specified operation on each value, and
-accumulating these values into a new tree.
--}
-map : (comparable -> comparable2) -> Tree comparable -> Tree comparable2
-map operator =
-    foldl
-        (insert << operator)
-        empty
-
-
-{-| Create a new set with elements that match the predicate.
--}
-filter : (comparable -> Bool) -> Tree comparable -> Tree comparable
-filter predicate =
-    foldl
-        (\item ->
-            if predicate item then
-                insert item
-            else
-                identity
-        )
-        empty
+    foldl (\_ _ acc -> acc + 1) 0
 
 
 {-| Union is implemented by folding over the second list and inserting it into
 the first list.
 -}
-union : Tree comparable -> Tree comparable -> Tree comparable
+union : Tree comparable v -> Tree comparable v -> Tree comparable v
 union =
     foldl insert
 
 
-{-| Tree intersection creates a new Tree containing only those values found in
-both trees. This is implemented by filtering the right-hand set, only keeping
-values found in the left-hand set.
+{-|
 -}
-intersect : Tree comparable -> Tree comparable -> Tree comparable
-intersect left =
-    filter (flip member left)
-
-
-{-| The differences between two trees is, in Elm land, defined as the elements
-of the left tree that do not exists in the right tree. As such, this is
-implemented by filtering the left tree for values that do not exist in the
-right set.
--}
-diff : Tree comparable -> Tree comparable -> Tree comparable
-diff left right =
-    filter (not << flip member right) left
-
-
-{-| Similar to filtering, this does not throw away the values that do not match
-the predicate, but creating a second tree from those values. The resulting
-trees are then returned as a tuple.
--}
-partition : (comparable -> Bool) -> Tree comparable -> ( Tree comparable, Tree comparable )
-partition predicate =
+filter : (comparable -> v -> Bool) -> Tree comparable v -> Tree comparable v
+filter predicate =
     foldl
-        (\item ->
-            if predicate item then
-                Tuple.mapFirst <| insert item
+        (\key val ->
+            if predicate key val then
+                insert key val
             else
-                Tuple.mapSecond <| insert item
+                identity
         )
-        ( empty, empty )
+        empty

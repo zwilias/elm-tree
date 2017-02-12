@@ -23,11 +23,11 @@ main =
 
 type alias Model =
     { nodeEnty : String
-    , set : Tree String
+    , set : Tree String ()
     }
 
 
-model : Tree String -> Model
+model : Tree String () -> Model
 model tree =
     Model "" tree
 
@@ -38,7 +38,7 @@ init =
         initialModel =
             "acegikm"
                 |> String.toList
-                |> List.map String.fromChar
+                |> List.map (\x -> ( String.fromChar x, () ))
                 |> Tree.fromList
                 |> model
     in
@@ -67,7 +67,7 @@ update action model =
         InsertNode ->
             { model
                 | nodeEnty = ""
-                , set = Tree.insert model.nodeEnty model.set
+                , set = Tree.insert model.nodeEnty () model.set
             }
                 ! []
 
@@ -112,13 +112,13 @@ renderForm currentText =
         ]
 
 
-renderTree : Tree String -> Html Msg
+renderTree : Tree String a -> Html Msg
 renderTree set =
     case set of
         Tree.Empty ->
             text "."
 
-        Tree.Node _ head left right ->
+        Tree.Node _ head _ left right ->
             div
                 [ style
                     [ ( "border", "1px solid grey" )
@@ -138,7 +138,7 @@ renderTree set =
                 ]
 
 
-renderLeftRight : Tree String -> Tree String -> Html Msg
+renderLeftRight : Tree String a -> Tree String a -> Html Msg
 renderLeftRight left right =
     div
         [ style
