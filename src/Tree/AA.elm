@@ -36,7 +36,7 @@ internal nodes.
 @docs unsafeMinimum, unsafeMaximum, skew, split, rebalance, decreaseLevel, getLevel, setLevel, mapRight
 
 # Fold-based operations
-@docs map, filter, toList, fromList, union, remove, intersect, diff, partition
+@docs filter, toList, fromList, union, remove,
 
 -}
 

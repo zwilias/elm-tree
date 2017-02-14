@@ -28,7 +28,7 @@ Implementation is hairy, though.
 @docs InsertionResult, insert, DeletionResult, remove, member, size, foldl, foldr
 
 # Fold-based operations
-@docs map, filter, toList, fromList, union, remove, intersect, diff, partition
+@docs filter, toList, fromList, union, remove, keys, values
 
 # Debugging
 @docs debugMode, trace
@@ -67,37 +67,37 @@ to deal with slightly more complicated rebalancing operations when deleting
 nodes. As with all our trees so far, we include an explicit sentinel node to
 mark empty branch-points (which denote leaf nodes)
 -}
-type Tree comparable
+type Tree k v
     = Empty
-    | TwoNode (Tree comparable) comparable (Tree comparable)
-    | ThreeNode (Tree comparable) comparable (Tree comparable) comparable (Tree comparable)
+    | TwoNode (Tree k v) k v (Tree k v)
+    | ThreeNode (Tree k v) k v (Tree k v) k v (Tree k v)
 
 
 {-| Creates an empty tree.
 -}
-empty : Tree comparable
+empty : Tree k v
 empty =
     Empty
 
 
 {-| Creates a singleton tree with the provided value.
 -}
-singleton : comparable -> Tree comparable
-singleton item =
-    TwoNode empty item empty
+singleton : comparable -> v -> Tree comparable v
+singleton key value =
+    TwoNode empty key value empty
 
 
 {-| A types used to handle the different cases that may arise during `remove`
 operations, and that need specific handling while unwinding the stack.
 -}
 type
-    DeletionResult comparable
+    DeletionResult k v
     -- NotFound means simply that the node could not be removed, for it does not exists
     = NotFound
       -- Orphaned means the subtree became one level less deep. This needs taking care of recursively, in order to restore the "all leaves at the same level" invariant
-    | Merged (Tree comparable)
+    | Merged (Tree k v)
       -- The simplest of cases - a subtree was replaced by something with an equivalent amount of levels, which means the break of invariants has been contained, and the replacement can simply bubble up
-    | Replaced (Tree comparable)
+    | Replaced (Tree k v)
 
 
 {-| Remove a value from the tree.
@@ -115,10 +115,10 @@ successor or predecessor and the algorithm is followed as if it were a
 leaf-node.
 - In case the value does not occur in the tree, nothing needs to happen.
 -}
-remove : comparable -> Tree comparable -> Tree comparable
+remove : comparable -> Tree comparable v -> Tree comparable v
 remove item tree =
     let
-        tag : DeletionResult comparable -> DeletionResult comparable
+        tag : DeletionResult comparable v -> DeletionResult comparable v
         tag result =
             let
                 logString : String
@@ -132,10 +132,10 @@ remove item tree =
                                 Empty ->
                                     "Merged leaf-node with single key into empty, leaving a hole for out parents to fill"
 
-                                TwoNode _ self _ ->
+                                TwoNode _ self _ _ ->
                                     "Merged into node with key: " ++ toString self
 
-                                ThreeNode _ left _ right _ ->
+                                ThreeNode _ left _ _ right _ _ ->
                                     "Merged into node with left: " ++ toString left ++ " and right: " ++ toString right
 
                         Replaced replacement ->
@@ -143,18 +143,18 @@ remove item tree =
                                 Empty ->
                                     "Replaced by empty, bubbling replacement up"
 
-                                TwoNode _ self _ ->
+                                TwoNode _ self _ _ ->
                                     "Replaced by node with key: " ++ toString self
 
-                                ThreeNode _ left _ right _ ->
+                                ThreeNode _ left _ _ right _ _ ->
                                     "Replaced by node with left: " ++ toString left ++ " and right: " ++ toString right
             in
                 trace logString result
 
-        findNextLarger : comparable -> Tree comparable -> comparable
+        findNextLarger : comparable -> Tree comparable v -> ( comparable, v )
         findNextLarger item tree =
             let
-                tag : comparable -> comparable
+                tag : a -> a
                 tag =
                     trace "Removing an internal node is hard, so substituting for the next larger value."
             in
@@ -162,29 +162,29 @@ remove item tree =
                     Empty ->
                         Debug.crash "Empty leaf at this point means the invariants were not maintainted."
 
-                    TwoNode Empty self _ ->
-                        if self <= item then
+                    TwoNode Empty key value _ ->
+                        if key <= item then
                             Debug.crash "Found smaller or equal item in right hand branch. Invariants not maintained."
                         else
-                            tag self
+                            tag ( key, value )
 
-                    ThreeNode Empty left _ _ _ ->
-                        if left <= item then
+                    ThreeNode Empty key value _ _ _ _ ->
+                        if key <= item then
                             Debug.crash "Found smaller or equal item in right hand branch. Invariants not maintained."
                         else
-                            tag left
+                            tag ( key, value )
 
-                    TwoNode lower _ _ ->
+                    TwoNode lower _ _ _ ->
                         findNextLarger item lower
 
-                    ThreeNode lower _ _ _ _ ->
+                    ThreeNode lower _ _ _ _ _ _ ->
                         findNextLarger item lower
 
-        taggedRemove : comparable -> Tree comparable -> DeletionResult comparable
+        taggedRemove : comparable -> Tree comparable v -> DeletionResult comparable v
         taggedRemove item tree =
             doRemove item tree |> tag
 
-        doRemove : comparable -> Tree comparable -> DeletionResult comparable
+        doRemove : comparable -> Tree comparable v -> DeletionResult comparable v
         doRemove item tree =
             case tree of
                 -- If its an empty tree, we can't possibly contain the value
@@ -193,26 +193,26 @@ remove item tree =
                     NotFound
 
                 -- Leafnode with 1 key: either it is us and we're "orphaning" an empty subtree (which means we're creating a hole in the tree that must somehow be filled), or it does not exists
-                TwoNode Empty self Empty ->
-                    if self == item then
+                TwoNode Empty key value Empty ->
+                    if key == item then
                         Merged empty
                     else
                         NotFound
 
                 -- Leafnode with 2 keys: Either punching a hole that can be filled by simply replacing with a singleton, or not found
-                ThreeNode Empty left Empty right Empty ->
+                ThreeNode Empty left lVal Empty right rVal Empty ->
                     if left == item then
-                        singleton right
+                        singleton right rVal
                             |> Replaced
                     else if right == item then
-                        singleton left
+                        singleton left lVal
                             |> Replaced
                     else
                         NotFound
 
                 -- internal node with 1 key: If our key is the key to be removed, look instead for the next larget node in the right-hand side of the tree, and "act" as if our node is located there
-                TwoNode lower self greater ->
-                    if item < self then
+                TwoNode lower key val greater ->
+                    if item < key then
                         case taggedRemove item lower of
                             NotFound ->
                                 NotFound
@@ -223,42 +223,46 @@ remove item tree =
                                     Empty ->
                                         Debug.crash "Invariant broken"
 
-                                    ThreeNode sLower sLeft sBetween sRight sGreater ->
+                                    ThreeNode sLower sLeft sLVal sBetween sRight sRVal sGreater ->
                                         TwoNode
                                             (TwoNode
                                                 mergeTree
-                                                self
+                                                key
+                                                val
                                                 sLower
                                             )
                                             sLeft
+                                            sLVal
                                             (TwoNode
                                                 sBetween
                                                 sRight
+                                                sRVal
                                                 sGreater
                                             )
                                             |> Replaced
 
-                                    TwoNode sLower sSelf sGreater ->
+                                    TwoNode sLower sSelf sVal sGreater ->
                                         ThreeNode
                                             mergeTree
-                                            self
+                                            key
+                                            val
                                             sLower
                                             sSelf
+                                            sVal
                                             sGreater
                                             |> Merged
 
                             -- Finally, a SIMPLE CASE YAY.
                             Replaced replacement ->
-                                TwoNode replacement self greater
+                                TwoNode replacement key val greater
                                     |> Replaced
-                    else if item == self then
+                    else if item == key then
                         let
-                            nextLarger : comparable
-                            nextLarger =
+                            ( nextKey, nextVal ) =
                                 findNextLarger item greater
                         in
                             -- We're an internal node, so we need to cheat a bit and remove the next larger (or lower, but we chose larger.) leafnode, taking care to re-insert that node and forget all about our self.
-                            case taggedRemove nextLarger greater of
+                            case taggedRemove nextKey greater of
                                 NotFound ->
                                     Debug.crash "We know it's there, just remove it, you can't tell me it wasn't found."
 
@@ -267,26 +271,30 @@ remove item tree =
                                         Empty ->
                                             Debug.crash "Invariant not maintained"
 
-                                        TwoNode sLower sSelf sGreater ->
+                                        TwoNode sLower sSelf sVal sGreater ->
                                             ThreeNode
                                                 sLower
                                                 sSelf
+                                                sVal
                                                 sGreater
-                                                nextLarger
+                                                nextKey
+                                                nextVal
                                                 mergeTree
                                                 |> Merged
 
-                                        ThreeNode sLower sLeft sBetween sRight sGreater ->
+                                        ThreeNode sLower sLeft sLVal sBetween sRight sRVal sGreater ->
                                             TwoNode
-                                                (TwoNode sLower sLeft sBetween)
+                                                (TwoNode sLower sLeft sLVal sBetween)
                                                 sRight
-                                                (TwoNode sGreater nextLarger mergeTree)
+                                                sRVal
+                                                (TwoNode sGreater nextKey nextVal mergeTree)
                                                 |> Replaced
 
                                 Replaced replacement ->
                                     TwoNode
                                         lower
-                                        nextLarger
+                                        nextKey
+                                        nextVal
                                         replacement
                                         |> Replaced
                     else
@@ -299,28 +307,31 @@ remove item tree =
                                     Empty ->
                                         Debug.crash "not possible"
 
-                                    TwoNode sLower sSelf sGreater ->
+                                    TwoNode sLower sSelf sVal sGreater ->
                                         ThreeNode
                                             sLower
                                             sSelf
+                                            sVal
                                             sGreater
-                                            self
+                                            key
+                                            val
                                             mergeTree
                                             |> Merged
 
-                                    ThreeNode sLower sLeft sBetween sRight sGreater ->
+                                    ThreeNode sLower sLeft sLVal sBetween sRight sRVal sGreater ->
                                         TwoNode
-                                            (TwoNode sLower sLeft sBetween)
+                                            (TwoNode sLower sLeft sLVal sBetween)
                                             sRight
-                                            (TwoNode sGreater self mergeTree)
+                                            sRVal
+                                            (TwoNode sGreater key val mergeTree)
                                             |> Replaced
 
                             -- Finally, a SIMPLE CASE YAY.
                             Replaced replacement ->
-                                TwoNode lower self replacement
+                                TwoNode lower key val replacement
                                     |> Replaced
 
-                ThreeNode lower left between right greater ->
+                ThreeNode lower left lVal between right rVal greater ->
                     if item < left then
                         case taggedRemove item lower of
                             NotFound ->
@@ -331,39 +342,46 @@ remove item tree =
                                     Empty ->
                                         Debug.crash "Not possible"
 
-                                    TwoNode bLower bSelf bGreater ->
+                                    TwoNode bLower bSelf bVal bGreater ->
                                         case greater of
                                             Empty ->
                                                 Debug.crash "Not possible"
 
-                                            TwoNode gLower gSelf gGreater ->
+                                            TwoNode gLower gSelf gVal gGreater ->
                                                 TwoNode
-                                                    (TwoNode mergeTree left bLower)
+                                                    (TwoNode mergeTree left lVal bLower)
                                                     bSelf
+                                                    bVal
                                                     (ThreeNode
                                                         bGreater
                                                         right
+                                                        rVal
                                                         gLower
                                                         gSelf
+                                                        gVal
                                                         gGreater
                                                     )
                                                     |> Replaced
 
-                                            ThreeNode gLower gLeft gBetween gRight gGreater ->
+                                            ThreeNode gLower gLeft gLVal gBetween gRight gRVal gGreater ->
                                                 ThreeNode
-                                                    (TwoNode mergeTree left bLower)
+                                                    (TwoNode mergeTree left lVal bLower)
                                                     bSelf
-                                                    (TwoNode bGreater right gLower)
+                                                    bVal
+                                                    (TwoNode bGreater right rVal gLower)
                                                     gLeft
-                                                    (TwoNode gBetween gRight gGreater)
+                                                    gLVal
+                                                    (TwoNode gBetween gRight gRVal gGreater)
                                                     |> Replaced
 
-                                    ThreeNode bLower bLeft bBetween bRight bGreater ->
+                                    ThreeNode bLower bLeft bLVal bBetween bRight bRVal bGreater ->
                                         ThreeNode
-                                            (TwoNode mergeTree left bLower)
+                                            (TwoNode mergeTree left lVal bLower)
                                             bLeft
-                                            (TwoNode bBetween bRight bGreater)
+                                            bLVal
+                                            (TwoNode bBetween bRight bRVal bGreater)
                                             right
+                                            rVal
                                             greater
                                             |> Replaced
 
@@ -371,17 +389,18 @@ remove item tree =
                                 ThreeNode
                                     replacement
                                     left
+                                    lVal
                                     between
                                     right
+                                    rVal
                                     greater
                                     |> Replaced
                     else if item == left then
                         let
-                            nextLarger : comparable
-                            nextLarger =
+                            ( nextKey, nextVal ) =
                                 findNextLarger item between
                         in
-                            case taggedRemove nextLarger between of
+                            case taggedRemove nextKey between of
                                 NotFound ->
                                     Debug.crash "We know it's there, just remove it, you can't tell me it wasn't found."
 
@@ -390,48 +409,57 @@ remove item tree =
                                         Empty ->
                                             Debug.crash "nein"
 
-                                        TwoNode lLower lSelf lGreater ->
+                                        TwoNode lLower lKey lVak lGreater ->
                                             case greater of
                                                 Empty ->
                                                     Debug.crash "nein"
 
-                                                TwoNode gLower gSelf gGreater ->
+                                                TwoNode gLower gKey gVal gGreater ->
                                                     TwoNode
                                                         (ThreeNode
                                                             lLower
-                                                            lSelf
+                                                            lKey
+                                                            lVal
                                                             lGreater
-                                                            nextLarger
+                                                            nextKey
+                                                            nextVal
                                                             mergeTree
                                                         )
                                                         right
+                                                        rVal
                                                         greater
                                                         |> Replaced
 
-                                                ThreeNode gLower gLeft gBetween gRight gGreater ->
+                                                ThreeNode gLower gLeft gLVal gBetween gRight gRVal gGreater ->
                                                     ThreeNode
                                                         lower
-                                                        nextLarger
-                                                        (TwoNode mergeTree right gLower)
+                                                        nextKey
+                                                        nextVal
+                                                        (TwoNode mergeTree right rVal gLower)
                                                         gLeft
-                                                        (TwoNode gBetween gRight gGreater)
+                                                        gLVal
+                                                        (TwoNode gBetween gRight gRVal gGreater)
                                                         |> Replaced
 
-                                        ThreeNode lLower lLeft lBetween lRight lGreater ->
+                                        ThreeNode lLower lLeft lLVal lBetween lRight lRVal lGreater ->
                                             ThreeNode
-                                                (TwoNode lLower lLeft lBetween)
+                                                (TwoNode lLower lLeft lLVal lBetween)
                                                 lRight
-                                                (TwoNode lGreater left mergeTree)
+                                                lRVal
+                                                (TwoNode lGreater left lVal mergeTree)
                                                 right
+                                                rVal
                                                 greater
                                                 |> Replaced
 
                                 Replaced replacement ->
                                     ThreeNode
                                         lower
-                                        nextLarger
+                                        nextKey
+                                        nextVal
                                         replacement
                                         right
+                                        rVal
                                         greater
                                         |> Replaced
                     else if item < right then
@@ -444,39 +472,46 @@ remove item tree =
                                     Empty ->
                                         Debug.crash "nein"
 
-                                    TwoNode lLower lSelf lGreater ->
+                                    TwoNode lLower lSelf lSVal lGreater ->
                                         case greater of
                                             Empty ->
                                                 Debug.crash "nein"
 
-                                            TwoNode gLower gSelf gGreater ->
+                                            TwoNode _ _ _ _ ->
                                                 TwoNode
                                                     (ThreeNode
                                                         lLower
                                                         lSelf
+                                                        lSVal
                                                         lGreater
                                                         left
+                                                        lVal
                                                         mergeTree
                                                     )
                                                     right
+                                                    rVal
                                                     greater
                                                     |> Replaced
 
-                                            ThreeNode gLower gLeft gBetween gRight gGreater ->
+                                            ThreeNode gLower gLeft gLVal gBetween gRight gRVal gGreater ->
                                                 ThreeNode
                                                     lower
                                                     left
-                                                    (TwoNode mergeTree right gLower)
+                                                    lVal
+                                                    (TwoNode mergeTree right rVal gLower)
                                                     gLeft
-                                                    (TwoNode gBetween gRight gGreater)
+                                                    gLVal
+                                                    (TwoNode gBetween gRight gRVal gGreater)
                                                     |> Replaced
 
-                                    ThreeNode lLower lLeft lBetween lRight lGreater ->
+                                    ThreeNode lLower lLeft lLVal lBetween lRight lRVal lGreater ->
                                         ThreeNode
-                                            (TwoNode lLower lLeft lBetween)
+                                            (TwoNode lLower lLeft lLVal lBetween)
                                             lRight
-                                            (TwoNode lGreater left mergeTree)
+                                            lRVal
+                                            (TwoNode lGreater left lVal mergeTree)
                                             right
+                                            rVal
                                             greater
                                             |> Replaced
 
@@ -484,17 +519,18 @@ remove item tree =
                                 ThreeNode
                                     lower
                                     left
+                                    lVal
                                     replacement
                                     right
+                                    rVal
                                     greater
                                     |> Replaced
                     else if item == right then
                         let
-                            nextLarger : comparable
-                            nextLarger =
+                            ( nextKey, nextVal ) =
                                 findNextLarger item greater
                         in
-                            case taggedRemove nextLarger greater of
+                            case taggedRemove nextKey greater of
                                 NotFound ->
                                     Debug.crash "We know it's there, just remove it, you can't tell me it wasn't found."
 
@@ -503,48 +539,57 @@ remove item tree =
                                         Empty ->
                                             Debug.crash "nope"
 
-                                        TwoNode bLower bSelf bGreater ->
+                                        TwoNode bLower bSelf bSVal bGreater ->
                                             case lower of
                                                 Empty ->
                                                     Debug.crash "still, nope"
 
-                                                TwoNode lLower lSelf lGreater ->
+                                                TwoNode lLower lSelf lSVal lGreater ->
                                                     TwoNode
                                                         (ThreeNode
                                                             lLower
                                                             lSelf
+                                                            lSVal
                                                             lGreater
                                                             left
+                                                            lVal
                                                             bLower
                                                         )
                                                         bSelf
-                                                        (TwoNode bGreater nextLarger mergeTree)
+                                                        bSVal
+                                                        (TwoNode bGreater nextKey nextVal mergeTree)
                                                         |> Replaced
 
-                                                ThreeNode lLower lLeft lBetween lRight lGreater ->
+                                                ThreeNode lLower lLeft lLVal lBetween lRight lRVal lGreater ->
                                                     ThreeNode
-                                                        (TwoNode lLower lLeft lBetween)
+                                                        (TwoNode lLower lLeft lLVal lBetween)
                                                         lRight
-                                                        (TwoNode lGreater left bLower)
+                                                        lRVal
+                                                        (TwoNode lGreater left lVal bLower)
                                                         bSelf
-                                                        (TwoNode bGreater nextLarger mergeTree)
+                                                        bSVal
+                                                        (TwoNode bGreater nextKey nextVal mergeTree)
                                                         |> Replaced
 
-                                        ThreeNode bLower bLeft bBetween bRight bGreater ->
+                                        ThreeNode bLower bLeft bLVal bBetween bRight bRVal bGreater ->
                                             ThreeNode
                                                 lower
                                                 left
-                                                (TwoNode bLower bLeft bBetween)
+                                                lVal
+                                                (TwoNode bLower bLeft bLVal bBetween)
                                                 bRight
-                                                (TwoNode bGreater nextLarger mergeTree)
+                                                bRVal
+                                                (TwoNode bGreater nextKey nextVal mergeTree)
                                                 |> Replaced
 
                                 Replaced replacement ->
                                     ThreeNode
                                         lower
                                         left
+                                        lVal
                                         between
-                                        nextLarger
+                                        nextKey
+                                        nextVal
                                         replacement
                                         |> Replaced
                     else
@@ -557,48 +602,57 @@ remove item tree =
                                     Empty ->
                                         Debug.crash "nope"
 
-                                    TwoNode bLower bSelf bGreater ->
+                                    TwoNode bLower bSelf bSVal bGreater ->
                                         case lower of
                                             Empty ->
                                                 Debug.crash "still, nope"
 
-                                            TwoNode lLower lSelf lGreater ->
+                                            TwoNode lLower lSelf lSVal lGreater ->
                                                 TwoNode
                                                     (ThreeNode
                                                         lLower
                                                         lSelf
+                                                        lSVal
                                                         lGreater
                                                         left
+                                                        lVal
                                                         bLower
                                                     )
                                                     bSelf
-                                                    (TwoNode bGreater right mergeTree)
+                                                    bSVal
+                                                    (TwoNode bGreater right rVal mergeTree)
                                                     |> Replaced
 
-                                            ThreeNode lLower lLeft lBetween lRight lGreater ->
+                                            ThreeNode lLower lLeft lLVal lBetween lRight lRVal lGreater ->
                                                 ThreeNode
-                                                    (TwoNode lLower lLeft lBetween)
+                                                    (TwoNode lLower lLeft lLVal lBetween)
                                                     lRight
-                                                    (TwoNode lGreater left bLower)
+                                                    lRVal
+                                                    (TwoNode lGreater left lVal bLower)
                                                     bSelf
-                                                    (TwoNode bGreater right mergeTree)
+                                                    bSVal
+                                                    (TwoNode bGreater right rVal mergeTree)
                                                     |> Replaced
 
-                                    ThreeNode bLower bLeft bBetween bRight bGreater ->
+                                    ThreeNode bLower bLeft bLVal bBetween bRight bRVal bGreater ->
                                         ThreeNode
                                             lower
                                             left
-                                            (TwoNode bLower bLeft bBetween)
+                                            lVal
+                                            (TwoNode bLower bLeft bLVal bBetween)
                                             bRight
-                                            (TwoNode bGreater right mergeTree)
+                                            bRVal
+                                            (TwoNode bGreater right rVal mergeTree)
                                             |> Replaced
 
                             Replaced replacement ->
                                 ThreeNode
                                     lower
                                     left
+                                    lVal
                                     between
                                     right
+                                    rVal
                                     replacement
                                     |> Replaced
     in
@@ -617,168 +671,177 @@ remove item tree =
 track of operations down the tree, and handling them as required after
 insertion, in order to maintain the invariant.
 -}
-type InsertionResult comparable
-    = Consumed (Tree comparable)
-    | Pushed (Tree comparable) comparable (Tree comparable)
+type InsertionResult k v
+    = Consumed (Tree k v)
+    | Pushed (Tree k v) k v (Tree k v)
     | AlreadyExists
 
 
 {-| Insertion is, albeit conceptually simple, in practice fairly complex due to
 the many variations that need to be considered.
 -}
-insert : comparable -> Tree comparable -> Tree comparable
-insert item tree =
+insert : comparable -> v -> Tree comparable v -> Tree comparable v
+insert key val tree =
     let
-        doInsertion : comparable -> Tree comparable -> InsertionResult comparable
-        doInsertion item tree =
+        doInsertion : comparable -> v -> Tree comparable v -> InsertionResult comparable v
+        doInsertion key val tree =
             case tree of
                 -- Empty tree results in a singleton
                 Empty ->
-                    singleton item |> Consumed
+                    singleton key val |> Consumed
 
                 -- Twonode with empty branches -> fill in a branch
-                TwoNode Empty self Empty ->
-                    if item < self then
-                        ThreeNode Empty item Empty self Empty
+                TwoNode Empty self sVal Empty ->
+                    if key < self then
+                        ThreeNode Empty key val Empty self sVal Empty
                             |> Consumed
-                    else if item == self then
+                    else if key == self then
                         AlreadyExists
                     else
-                        ThreeNode Empty self Empty item Empty
+                        ThreeNode Empty self sVal Empty key val Empty
                             |> Consumed
 
                 -- ThreeNode with empty branches
-                ThreeNode Empty left Empty right Empty ->
-                    if item < left then
+                ThreeNode Empty left lVal Empty right rVal Empty ->
+                    if key < left then
                         -- This forces us into a 4-node, so we split and pass a new root to our parent, which will then consume if (or split, too)
-                        Pushed (singleton item) left (singleton right)
-                    else if item == left then
+                        Pushed (singleton key val) left lVal (singleton right rVal)
+                    else if key == left then
                         -- It's me, it's me!
                         AlreadyExists
-                    else if item < right then
-                        Pushed (singleton left) item (singleton right)
-                    else if item == right then
+                    else if key < right then
+                        Pushed (singleton left lVal) key val (singleton right rVal)
+                    else if key == right then
                         AlreadyExists
                     else
-                        Pushed (singleton left) right (singleton item)
+                        Pushed (singleton left lVal) right rVal (singleton key val)
 
                 -- TwoNode with actual branches -> potentially need to split
-                TwoNode lower self greater ->
-                    if item < self then
-                        case doInsertion item lower of
+                TwoNode lower self sVal greater ->
+                    if key < self then
+                        case doInsertion key val lower of
                             -- If the subtree needed no split, we consume, too
                             Consumed newLower ->
                                 TwoNode
                                     newLower
                                     self
+                                    sVal
                                     greater
                                     |> Consumed
 
                             -- Subtree needed a split, so we consume that split
-                            Pushed newLower newLeft newMiddle ->
+                            Pushed newLower newLeft newLeftVal newMiddle ->
                                 ThreeNode
                                     newLower
                                     newLeft
+                                    newLeftVal
                                     newMiddle
                                     self
+                                    sVal
                                     greater
                                     |> Consumed
 
                             AlreadyExists ->
                                 AlreadyExists
-                    else if item == self then
+                    else if key == self then
                         AlreadyExists
                     else
-                        case doInsertion item greater of
+                        case doInsertion key val greater of
                             -- If the subtree needed no split, we consume, too
                             Consumed newGreater ->
                                 TwoNode
                                     lower
                                     self
+                                    sVal
                                     newGreater
                                     |> Consumed
 
                             -- Subtree split, so we consume the new value
-                            Pushed newMiddle newRight newGreater ->
+                            Pushed newMiddle newRight newRightVal newGreater ->
                                 ThreeNode
                                     lower
                                     self
+                                    sVal
                                     newMiddle
                                     newRight
+                                    newRightVal
                                     newGreater
                                     |> Consumed
 
                             AlreadyExists ->
                                 AlreadyExists
 
-                ThreeNode lower left between right greater ->
-                    if item < left then
-                        case doInsertion item lower of
+                ThreeNode lower left lVal between right rVal greater ->
+                    if key < left then
+                        case doInsertion key val lower of
                             Consumed newLower ->
-                                ThreeNode newLower left between right greater
+                                ThreeNode newLower left lVal between right rVal greater
                                     |> Consumed
 
-                            Pushed newLower newSelf newGreater ->
+                            Pushed newLower newSelf newSelfVal newGreater ->
                                 Pushed
-                                    (TwoNode newLower newSelf newGreater)
+                                    (TwoNode newLower newSelf newSelfVal newGreater)
                                     left
-                                    (TwoNode between right greater)
+                                    lVal
+                                    (TwoNode between right rVal greater)
 
                             AlreadyExists ->
                                 AlreadyExists
-                    else if item == left then
+                    else if key == left then
                         AlreadyExists
-                    else if item < right then
-                        case doInsertion item between of
+                    else if key < right then
+                        case doInsertion key val between of
                             Consumed newBetween ->
-                                ThreeNode lower left newBetween right greater
+                                ThreeNode lower left lVal newBetween right rVal greater
                                     |> Consumed
 
-                            Pushed newLower newSelf newGreater ->
+                            Pushed newLower newSelf newSelfVal newGreater ->
                                 Pushed
-                                    (TwoNode lower left newLower)
+                                    (TwoNode lower left lVal newLower)
                                     newSelf
-                                    (TwoNode newGreater right greater)
+                                    newSelfVal
+                                    (TwoNode newGreater right rVal greater)
 
                             AlreadyExists ->
                                 AlreadyExists
-                    else if item == right then
+                    else if key == right then
                         AlreadyExists
                     else
-                        case doInsertion item greater of
+                        case doInsertion key val greater of
                             Consumed newGreater ->
-                                ThreeNode lower left between right newGreater
+                                ThreeNode lower left lVal between right rVal newGreater
                                     |> Consumed
 
-                            Pushed newLower newSelf newGreater ->
+                            Pushed newLower newSelf newSelfVal newGreater ->
                                 Pushed
-                                    (TwoNode lower left between)
+                                    (TwoNode lower left lVal between)
                                     right
-                                    (TwoNode newLower newSelf newGreater)
+                                    rVal
+                                    (TwoNode newLower newSelf newSelfVal newGreater)
 
                             AlreadyExists ->
                                 AlreadyExists
     in
-        case doInsertion item tree of
+        case doInsertion key val tree of
             AlreadyExists ->
                 tree
 
             Consumed byTree ->
                 byTree
 
-            Pushed smaller self higher ->
-                TwoNode smaller self higher
+            Pushed smaller self selfVal higher ->
+                TwoNode smaller self selfVal higher
 
 
 {-| Recursively check if a given value is a member of the tree.
 -}
-member : comparable -> Tree comparable -> Bool
+member : comparable -> Tree comparable v -> Bool
 member item tree =
     case tree of
         Empty ->
             False
 
-        TwoNode lower self greater ->
+        TwoNode lower self _ greater ->
             if item < self then
                 member item lower
             else if item == self then
@@ -786,7 +849,7 @@ member item tree =
             else
                 member item greater
 
-        ThreeNode lower left between right greater ->
+        ThreeNode lower left _ between right _ greater ->
             if item < left then
                 member item lower
             else if item == left then
@@ -801,43 +864,43 @@ member item tree =
 
 {-| Recursively fold over values in the tree, depth first, left to right.
 -}
-foldl : (comparable -> a -> a) -> a -> Tree comparable -> a
+foldl : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldl operation acc tree =
     case tree of
         Empty ->
             acc
 
-        TwoNode lower self greater ->
+        TwoNode lower self sVal greater ->
             foldl operation acc lower
-                |> operation self
+                |> operation self sVal
                 |> swirlr foldl greater operation
 
-        ThreeNode lower left between right greater ->
+        ThreeNode lower left lVal between right rVal greater ->
             foldl operation acc lower
-                |> operation left
+                |> operation left lVal
                 |> swirlr foldl between operation
-                |> operation right
+                |> operation right rVal
                 |> swirlr foldl greater operation
 
 
 {-| Recursively fold over values in the tree, depth first, right to left.
 -}
-foldr : (comparable -> a -> a) -> a -> Tree comparable -> a
+foldr : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldr operation acc tree =
     case tree of
         Empty ->
             acc
 
-        TwoNode lower self greater ->
+        TwoNode lower self sVal greater ->
             foldl operation acc greater
-                |> operation self
+                |> operation self sVal
                 |> swirlr foldl lower operation
 
-        ThreeNode lower left between right greater ->
+        ThreeNode lower left lVal between right rVal greater ->
             foldl operation acc greater
-                |> operation left
+                |> operation right rVal
                 |> swirlr foldl between operation
-                |> operation right
+                |> operation left lVal
                 |> swirlr foldl lower operation
 
 
@@ -847,89 +910,58 @@ foldr operation acc tree =
 
 {-| Convert tree to list in ascending order, using foldl.
 -}
-toList : Tree comparable -> List comparable
-toList =
-    foldl (::) []
+keys : Tree k v -> List k
+keys =
+    foldr (\key val -> (::) key) []
+
+
+{-|
+-}
+values : Tree k v -> List v
+values =
+    foldr (\key val -> (::) val) []
 
 
 {-| Create tree from list by folding over the list and inserting into an
 initially empty tree.
 -}
-fromList : List comparable -> Tree comparable
+fromList : List ( comparable, v ) -> Tree comparable v
 fromList =
-    List.foldl insert empty
+    List.foldl (uncurry insert) empty
+
+
+{-| Tree to list of key-value pairs
+-}
+toList : Tree k v -> List ( k, v )
+toList =
+    foldr ((\k v -> (::) ( k, v ))) []
 
 
 {-| Foldl over the list and incrementing an accumulator by one for each value
 that passes through the accumulator operation.
 -}
-size : Tree comparable -> Int
+size : Tree k v -> Int
 size =
-    foldl (\_ acc -> acc + 1) 0
-
-
-{-| Create a new set with elements that match the predicate.
--}
-filter : (comparable -> Bool) -> Tree comparable -> Tree comparable
-filter predicate =
-    foldl
-        (\item ->
-            if predicate item then
-                insert item
-            else
-                identity
-        )
-        empty
+    foldl (\_ _ acc -> acc + 1) 0
 
 
 {-| Union is implemented by folding over the second list and inserting it into
 the first list.
 -}
-union : Tree comparable -> Tree comparable -> Tree comparable
+union : Tree comparable v -> Tree comparable v -> Tree comparable v
 union =
     foldl insert
 
 
-{-| Tree intersection creates a new Tree containing only those values found in
-both trees. This is implemented by filtering the right-hand set, only keeping
-values found in the left-hand set.
+{-|
 -}
-intersect : Tree comparable -> Tree comparable -> Tree comparable
-intersect left =
-    filter (flip member left)
-
-
-{-| The differences between two trees is, in Elm land, defined as the elements
-of the left tree that do not exists in the right tree. As such, this is
-implemented by filtering the left tree for values that do not exist in the
-right set.
--}
-diff : Tree comparable -> Tree comparable -> Tree comparable
-diff left right =
-    filter (not << flip member right) left
-
-
-{-| Similar to filtering, this does not throw away the values that do not match
-the predicate, but creating a second tree from those values. The resulting
-trees are then returned as a tuple.
--}
-partition : (comparable -> Bool) -> Tree comparable -> ( Tree comparable, Tree comparable )
-partition predicate =
+filter : (comparable -> v -> Bool) -> Tree comparable v -> Tree comparable v
+filter predicate =
     foldl
-        (\item ->
-            if predicate item then
-                Tuple.mapFirst <| insert item
+        (\key val ->
+            if predicate key val then
+                insert key val
             else
-                Tuple.mapSecond <| insert item
+                identity
         )
-        ( empty, empty )
-
-
-{-| Fold over the tree, executing the specified operation on each value, and
-accumulating these values into a new tree.
--}
-map : (comparable -> comparable2) -> Tree comparable -> Tree comparable2
-map operator =
-    foldl
-        (insert << operator)
         empty
