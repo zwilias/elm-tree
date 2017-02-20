@@ -20,10 +20,7 @@ rotations for every internal node while the stack unwinds.
 @docs empty, singleton
 
 # Basic operations
-@docs insert, remove, update, member, get, size, foldl, foldr
-
-# Fold-based operations
-@docs filter, fromList, toList, union, remove, keys, values
+@docs insert, remove, set, member, get, foldl, foldr
 
 # Internals
 @docs tree, rotateLeft, rotateRight, height, heightDiff, balance
@@ -85,7 +82,7 @@ insert key value set =
             else if key > head then
                 tree head headVal left (insert key value right) |> balance
             else
-                set
+                tree head value left right
 
 
 {-| Removal in AVL trees works by searching for the node to be removed, and
@@ -107,7 +104,7 @@ remove key set =
             else if key > head then
                 tree head headVal left (remove key right) |> balance
             else
-                union left right
+                foldl insert right left
 
 
 {-| Member checks happen the same way as in other binary trees, recursively
@@ -146,32 +143,22 @@ get key tree =
                 Just value
 
 
-{-| Update a value. This might be an actual update, or an deletion, or an
-insertion. Ewww.
+{-| Set the value at key to the provided value, or return the unmodified tree
+if it did not exist.
 -}
-update : comparable -> (Maybe v -> Maybe v) -> Tree comparable v -> Tree comparable v
-update key getNewValue tree =
+set : comparable -> v -> Tree comparable v -> Tree comparable v
+set key newValue tree =
     case tree of
         Empty ->
-            case getNewValue Nothing of
-                Nothing ->
-                    Empty
-
-                Just value ->
-                    singleton key value
+            Empty
 
         Node height head value left right ->
             if key < head then
-                update key getNewValue left |> balance
+                set key newValue left |> balance
             else if key > head then
-                update key getNewValue right |> balance
+                set key newValue right |> balance
             else
-                case getNewValue (Just value) of
-                    Nothing ->
-                        union left right
-
-                    Just newValue ->
-                        Node height head newValue left right
+                Node height head newValue left right
 
 
 
@@ -345,62 +332,31 @@ balance set =
 
 
 
--- Fold-based operations
+-- Helpers
 
 
-{-| Convert tree to list in ascending order, using foldl.
--}
-keys : Tree k v -> List k
-keys =
-    foldr (\key val -> (::) key) []
-
-
-{-|
--}
-values : Tree k v -> List v
-values =
-    foldr (\key val -> (::) val) []
-
-
-{-| Create tree from list by folding over the list and inserting into an
-initially empty tree.
+{-| Convert an association list into a dictionary.
 -}
 fromList : List ( comparable, v ) -> Tree comparable v
-fromList =
-    List.foldl (uncurry insert) empty
+fromList assocs =
+    List.foldl (\( key, value ) dict -> insert key value dict) empty assocs
 
 
-{-| Tree to list of key-value pairs
--}
-toList : Tree k v -> List ( k, v )
-toList =
-    foldr ((\k v -> (::) ( k, v ))) []
-
-
-{-| Foldl over the list and incrementing an accumulator by one for each value
-that passes through the accumulator operation.
+{-| Determine the number of key-value pairs in the dictionary.
 -}
 size : Tree k v -> Int
 size =
-    foldl (\_ _ acc -> acc + 1) 0
+    foldl (\k v -> (+) 1) 0
 
 
-{-| Union is implemented by folding over the second list and inserting it into
-the first list.
--}
-union : Tree comparable v -> Tree comparable v -> Tree comparable v
-union =
-    foldl insert
-
-
-{-|
+{-| Keep a key-value pair when it satisfies a predicate.
 -}
 filter : (comparable -> v -> Bool) -> Tree comparable v -> Tree comparable v
 filter predicate =
     foldl
-        (\key val ->
-            if predicate key val then
-                insert key val
+        (\k v ->
+            if predicate k v then
+                insert k v
             else
                 identity
         )

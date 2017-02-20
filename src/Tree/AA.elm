@@ -30,13 +30,10 @@ internal nodes.
 @docs empty, singleton
 
 # Basic operations
-@docs insert, remove, member, size, foldl, foldr
+@docs insert, remove, member, foldl, foldr
 
 # AA tree operations
 @docs unsafeMinimum, unsafeMaximum, skew, split, rebalance, decreaseLevel, getLevel, setLevel, mapRight
-
-# Fold-based operations
-@docs filter, toList, fromList, union, remove,
 
 -}
 
@@ -379,62 +376,31 @@ rebalance =
 
 
 
--- Fold-based operations
+-- Helpers
 
 
-{-| Convert tree to list in ascending order, using foldl.
--}
-keys : Tree k v -> List k
-keys =
-    foldr (\key val -> (::) key) []
-
-
-{-|
--}
-values : Tree k v -> List v
-values =
-    foldr (\key val -> (::) val) []
-
-
-{-| Create tree from list by folding over the list and inserting into an
-initially empty tree.
+{-| Convert an association list into a dictionary.
 -}
 fromList : List ( comparable, v ) -> Tree comparable v
-fromList =
-    List.foldl (uncurry insert) empty
+fromList assocs =
+    List.foldl (\( key, value ) dict -> insert key value dict) empty assocs
 
 
-{-| Tree to list of key-value pairs
--}
-toList : Tree k v -> List ( k, v )
-toList =
-    foldr ((\k v -> (::) ( k, v ))) []
-
-
-{-| Foldl over the list and incrementing an accumulator by one for each value
-that passes through the accumulator operation.
+{-| Determine the number of key-value pairs in the dictionary.
 -}
 size : Tree k v -> Int
 size =
-    foldl (\_ _ acc -> acc + 1) 0
+    foldl (\k v -> (+) 1) 0
 
 
-{-| Union is implemented by folding over the second list and inserting it into
-the first list.
--}
-union : Tree comparable v -> Tree comparable v -> Tree comparable v
-union =
-    foldl insert
-
-
-{-|
+{-| Keep a key-value pair when it satisfies a predicate.
 -}
 filter : (comparable -> v -> Bool) -> Tree comparable v -> Tree comparable v
 filter predicate =
     foldl
-        (\key val ->
-            if predicate key val then
-                insert key val
+        (\k v ->
+            if predicate k v then
+                insert k v
             else
                 identity
         )
