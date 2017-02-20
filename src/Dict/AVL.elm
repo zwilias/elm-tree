@@ -136,14 +136,11 @@ update k alter dict =
             alter current
     in
         case ( current, newVal ) of
-            ( Nothing, Just v ) ->
-                insert k v dict
-
             ( Just v, Nothing ) ->
                 remove k dict
 
-            ( Just _, Just v ) ->
-                Tree.set k v dict
+            ( _, Just v ) ->
+                insert k v dict
 
             ( Nothing, Nothing ) ->
                 dict

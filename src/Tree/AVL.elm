@@ -143,24 +143,6 @@ get key tree =
                 Just value
 
 
-{-| Set the value at key to the provided value, or return the unmodified tree
-if it did not exist.
--}
-set : comparable -> v -> Tree comparable v -> Tree comparable v
-set key newValue tree =
-    case tree of
-        Empty ->
-            Empty
-
-        Node height head value left right ->
-            if key < head then
-                set key newValue left |> balance
-            else if key > head then
-                set key newValue right |> balance
-            else
-                Node height head newValue left right
-
-
 
 -- Folds
 

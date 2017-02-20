@@ -66,6 +66,21 @@ singleton key value =
     Node 1 empty key value empty
 
 
+get : comparable -> Tree comparable v -> Maybe v
+get key tree =
+    case tree of
+        Empty ->
+            Nothing
+
+        Node _ left self value right ->
+            if key < self then
+                get key left
+            else if key > self then
+                get key right
+            else
+                Just value
+
+
 {-| Insertion in an AA tree is quite simple:
 
 - Find the insertion point
@@ -104,7 +119,12 @@ insert key value tree =
                         right
                         |> fixup
                 else if key == selfk then
-                    tree
+                    Node
+                        level
+                        left
+                        key
+                        value
+                        right
                 else
                     Node
                         level
