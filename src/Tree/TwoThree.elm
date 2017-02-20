@@ -87,6 +87,33 @@ singleton key value =
     TwoNode empty key value empty
 
 
+get : comparable -> Tree comparable v -> Maybe v
+get key tree =
+    case tree of
+        Empty ->
+            Nothing
+
+        TwoNode left self value right ->
+            if key < self then
+                get key left
+            else if key > self then
+                get key right
+            else
+                Just value
+
+        ThreeNode lower lKey lVal between rKey rVal greater ->
+            if key < lKey then
+                get key lower
+            else if key == lKey then
+                Just lVal
+            else if key < rKey then
+                get key between
+            else if key == rKey then
+                Just rVal
+            else
+                get key greater
+
+
 {-| A types used to handle the different cases that may arise during `remove`
 operations, and that need specific handling while unwinding the stack.
 -}
@@ -674,7 +701,6 @@ insertion, in order to maintain the invariant.
 type InsertionResult k v
     = Consumed (Tree k v)
     | Pushed (Tree k v) k v (Tree k v)
-    | AlreadyExists
 
 
 {-| Insertion is, albeit conceptually simple, in practice fairly complex due to
@@ -696,7 +722,8 @@ insert key val tree =
                         ThreeNode Empty key val Empty self sVal Empty
                             |> Consumed
                     else if key == self then
-                        AlreadyExists
+                        TwoNode Empty self val Empty
+                            |> Consumed
                     else
                         ThreeNode Empty self sVal Empty key val Empty
                             |> Consumed
@@ -708,11 +735,13 @@ insert key val tree =
                         Pushed (singleton key val) left lVal (singleton right rVal)
                     else if key == left then
                         -- It's me, it's me!
-                        AlreadyExists
+                        ThreeNode Empty left val Empty right rVal Empty
+                            |> Consumed
                     else if key < right then
                         Pushed (singleton left lVal) key val (singleton right rVal)
                     else if key == right then
-                        AlreadyExists
+                        ThreeNode Empty left lVal Empty right val Empty
+                            |> Consumed
                     else
                         Pushed (singleton left lVal) right rVal (singleton key val)
 
@@ -740,11 +769,9 @@ insert key val tree =
                                     sVal
                                     greater
                                     |> Consumed
-
-                            AlreadyExists ->
-                                AlreadyExists
                     else if key == self then
-                        AlreadyExists
+                        TwoNode lower self val greater
+                            |> Consumed
                     else
                         case doInsertion key val greater of
                             -- If the subtree needed no split, we consume, too
@@ -768,9 +795,6 @@ insert key val tree =
                                     newGreater
                                     |> Consumed
 
-                            AlreadyExists ->
-                                AlreadyExists
-
                 ThreeNode lower left lVal between right rVal greater ->
                     if key < left then
                         case doInsertion key val lower of
@@ -784,11 +808,9 @@ insert key val tree =
                                     left
                                     lVal
                                     (TwoNode between right rVal greater)
-
-                            AlreadyExists ->
-                                AlreadyExists
                     else if key == left then
-                        AlreadyExists
+                        ThreeNode lower key val between right rVal greater
+                            |> Consumed
                     else if key < right then
                         case doInsertion key val between of
                             Consumed newBetween ->
@@ -801,11 +823,9 @@ insert key val tree =
                                     newSelf
                                     newSelfVal
                                     (TwoNode newGreater right rVal greater)
-
-                            AlreadyExists ->
-                                AlreadyExists
                     else if key == right then
-                        AlreadyExists
+                        ThreeNode lower left lVal between key val greater
+                            |> Consumed
                     else
                         case doInsertion key val greater of
                             Consumed newGreater ->
@@ -818,14 +838,8 @@ insert key val tree =
                                     right
                                     rVal
                                     (TwoNode newLower newSelf newSelfVal newGreater)
-
-                            AlreadyExists ->
-                                AlreadyExists
     in
         case doInsertion key val tree of
-            AlreadyExists ->
-                tree
-
             Consumed byTree ->
                 byTree
 
@@ -892,75 +906,44 @@ foldr operation acc tree =
             acc
 
         TwoNode lower self sVal greater ->
-            foldl operation acc greater
+            foldr operation acc greater
                 |> operation self sVal
-                |> swirlr foldl lower operation
+                |> swirlr foldr lower operation
 
         ThreeNode lower left lVal between right rVal greater ->
-            foldl operation acc greater
+            foldr operation acc greater
                 |> operation right rVal
-                |> swirlr foldl between operation
+                |> swirlr foldr between operation
                 |> operation left lVal
-                |> swirlr foldl lower operation
+                |> swirlr foldr lower operation
 
 
 
--- Fold-based operations
+-- Helpers
 
 
-{-| Convert tree to list in ascending order, using foldl.
--}
-keys : Tree k v -> List k
-keys =
-    foldr (\key val -> (::) key) []
-
-
-{-|
--}
-values : Tree k v -> List v
-values =
-    foldr (\key val -> (::) val) []
-
-
-{-| Create tree from list by folding over the list and inserting into an
-initially empty tree.
+{-| Convert an association list into a dictionary.
 -}
 fromList : List ( comparable, v ) -> Tree comparable v
-fromList =
-    List.foldl (uncurry insert) empty
+fromList assocs =
+    List.foldl (\( key, value ) dict -> insert key value dict) empty assocs
 
 
-{-| Tree to list of key-value pairs
--}
-toList : Tree k v -> List ( k, v )
-toList =
-    foldr ((\k v -> (::) ( k, v ))) []
-
-
-{-| Foldl over the list and incrementing an accumulator by one for each value
-that passes through the accumulator operation.
+{-| Determine the number of key-value pairs in the dictionary.
 -}
 size : Tree k v -> Int
 size =
-    foldl (\_ _ acc -> acc + 1) 0
+    foldl (\k v -> (+) 1) 0
 
 
-{-| Union is implemented by folding over the second list and inserting it into
-the first list.
--}
-union : Tree comparable v -> Tree comparable v -> Tree comparable v
-union =
-    foldl insert
-
-
-{-|
+{-| Keep a key-value pair when it satisfies a predicate.
 -}
 filter : (comparable -> v -> Bool) -> Tree comparable v -> Tree comparable v
 filter predicate =
     foldl
-        (\key val ->
-            if predicate key val then
-                insert key val
+        (\k v ->
+            if predicate k v then
+                insert k v
             else
                 identity
         )

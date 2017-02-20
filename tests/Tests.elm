@@ -6,6 +6,7 @@ import Tree.AVLTest
 import Tree.TwoThreeTest
 import Dict.AATest
 import Dict.AVLTest
+import Dict.TwoThreeTest
 
 
 all : Test
@@ -16,4 +17,5 @@ all =
         , Tree.TwoThreeTest.all
         , Dict.AATest.tests
         , Dict.AVLTest.tests
+        , Dict.TwoThreeTest.tests
         ]
