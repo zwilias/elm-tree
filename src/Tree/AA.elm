@@ -30,7 +30,7 @@ internal nodes.
 @docs empty, singleton
 
 # Basic operations
-@docs insert, remove, member, foldl, foldr
+@docs insert, remove, member, foldl, foldr, filter, fromList, get, size
 
 # AA tree operations
 @docs unsafeMinimum, unsafeMaximum, skew, split, rebalance, decreaseLevel, getLevel, setLevel, mapRight
@@ -66,6 +66,17 @@ singleton key value =
     Node 1 empty key value empty
 
 
+{-| Get the value associated with a key. If the key is not found, return
+`Nothing`. This is useful when you are not sure if a key will be in the
+tree.
+
+    animals = fromList [ ("Tom", Cat), ("Jerry", Mouse) ]
+
+    get "Tom"   animals == Just Cat
+    get "Jerry" animals == Just Mouse
+    get "Spike" animals == Nothing
+
+-}
 get : comparable -> Tree comparable v -> Maybe v
 get key tree =
     case tree of
@@ -204,6 +215,9 @@ member item tree =
                 member item right
 
 
+{-| Fold over the key-value pairs in a dictionary, in order from lowest
+key to highest key.
+-}
 foldl : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldl op acc tree =
     case tree of
@@ -216,6 +230,9 @@ foldl op acc tree =
                 |> swirlr foldl right op
 
 
+{-| Fold over the key-value pairs in a dictionary, in order from highest
+key to lowest key.
+-}
 foldr : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldr op acc tree =
     case tree of

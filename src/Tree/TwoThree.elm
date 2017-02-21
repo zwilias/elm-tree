@@ -25,10 +25,10 @@ Implementation is hairy, though.
 @docs empty, singleton
 
 # Basic operations
-@docs InsertionResult, insert, DeletionResult, remove, member, size, foldl, foldr
+@docs InsertionResult, insert, DeletionResult, remove, member, size, foldl, foldr, get
 
 # Fold-based operations
-@docs filter, toList, fromList, union, remove, keys, values
+@docs filter, fromList, remove
 
 # Debugging
 @docs debugMode, trace
@@ -87,6 +87,17 @@ singleton key value =
     TwoNode empty key value empty
 
 
+{-| Get the value associated with a key. If the key is not found, return
+`Nothing`. This is useful when you are not sure if a key will be in the
+tree.
+
+    animals = fromList [ ("Tom", Cat), ("Jerry", Mouse) ]
+
+    get "Tom"   animals == Just Cat
+    get "Jerry" animals == Just Mouse
+    get "Spike" animals == Nothing
+
+-}
 get : comparable -> Tree comparable v -> Maybe v
 get key tree =
     case tree of
@@ -876,7 +887,8 @@ member item tree =
                 member item greater
 
 
-{-| Recursively fold over values in the tree, depth first, left to right.
+{-| Fold over the key-value pairs in a dictionary, in order from lowest
+key to highest key.
 -}
 foldl : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldl operation acc tree =
@@ -897,7 +909,8 @@ foldl operation acc tree =
                 |> swirlr foldl greater operation
 
 
-{-| Recursively fold over values in the tree, depth first, right to left.
+{-| Fold over the key-value pairs in a dictionary, in order from highest
+key to lowest key.
 -}
 foldr : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldr operation acc tree =

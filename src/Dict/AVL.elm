@@ -58,15 +58,15 @@ import Tree.AVL as Tree exposing (Tree)
 that lets you look up a `String` (such as user names) and find the associated
 `User`.
 -}
-type alias Dict k v =
-    Tree k v
+type Dict k v
+    = Dict (Tree k v)
 
 
 {-| Create an empty dictionary.
 -}
 empty : Dict k v
 empty =
-    Tree.empty
+    Dict Tree.empty
 
 
 {-| Get the value associated with a key. If the key is not found, return
@@ -81,22 +81,22 @@ dictionary.
 
 -}
 get : comparable -> Dict comparable v -> Maybe v
-get =
-    Tree.get
+get key (Dict tree) =
+    Tree.get key tree
 
 
 {-| Determine if a key is in a dictionary.
 -}
 member : comparable -> Dict comparable v -> Bool
-member =
-    Tree.member
+member key (Dict tree) =
+    Tree.member key tree
 
 
 {-| Determine the number of key-value pairs in the dictionary.
 -}
 size : Dict k v -> Int
-size =
-    Tree.foldl (\k v -> (+) 1) 0
+size (Dict tree) =
+    Tree.foldl (\k v -> (+) 1) 0 tree
 
 
 {-| Determine if a dictionary is empty.
@@ -112,16 +112,16 @@ isEmpty dict =
 a collision.
 -}
 insert : comparable -> v -> Dict comparable v -> Dict comparable v
-insert =
-    Tree.insert
+insert key value (Dict tree) =
+    Dict <| Tree.insert key value tree
 
 
 {-| Remove a key-value pair from a dictionary. If the key is not found,
 no changes are made.
 -}
 remove : comparable -> Dict comparable v -> Dict comparable v
-remove =
-    Tree.remove
+remove key (Dict tree) =
+    Dict <| Tree.remove key tree
 
 
 {-| Update the value of a dictionary for a specific key with a given function.
@@ -149,8 +149,8 @@ update k alter dict =
 {-| Create a dictionary with one key-value pair.
 -}
 singleton : comparable -> v -> Dict comparable v
-singleton =
-    Tree.singleton
+singleton key value =
+    Dict <| Tree.singleton key value
 
 
 
@@ -236,16 +236,16 @@ map f =
 key to highest key.
 -}
 foldl : (comparable -> v -> b -> b) -> b -> Dict comparable v -> b
-foldl =
-    Tree.foldl
+foldl op acc (Dict tree) =
+    Tree.foldl op acc tree
 
 
 {-| Fold over the key-value pairs in a dictionary, in order from highest
 key to lowest key.
 -}
 foldr : (comparable -> v -> b -> b) -> b -> Dict comparable v -> b
-foldr =
-    Tree.foldr
+foldr op acc (Dict tree) =
+    Tree.foldr op acc tree
 
 
 {-| Keep a key-value pair when it satisfies a predicate.

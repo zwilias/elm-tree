@@ -20,7 +20,7 @@ rotations for every internal node while the stack unwinds.
 @docs empty, singleton
 
 # Basic operations
-@docs insert, remove, set, member, get, foldl, foldr
+@docs insert, remove, member, get, foldl, foldr, size, filter, fromList
 
 # Internals
 @docs tree, rotateLeft, rotateRight, height, heightDiff, balance
@@ -126,7 +126,16 @@ member key set =
                 True
 
 
-{-| Get returns the value associated with the key if it exists.
+{-| Get the value associated with a key. If the key is not found, return
+`Nothing`. This is useful when you are not sure if a key will be in the
+tree.
+
+    animals = fromList [ ("Tom", Cat), ("Jerry", Mouse) ]
+
+    get "Tom"   animals == Just Cat
+    get "Jerry" animals == Just Mouse
+    get "Spike" animals == Nothing
+
 -}
 get : comparable -> Tree comparable v -> Maybe v
 get key tree =
@@ -147,7 +156,8 @@ get key tree =
 -- Folds
 
 
-{-|
+{-| Fold over the key-value pairs in a dictionary, in order from lowest
+key to highest key.
 -}
 foldl : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldl op acc tree =
@@ -161,7 +171,8 @@ foldl op acc tree =
                 |> (\acc -> foldl op acc right)
 
 
-{-|
+{-| Fold over the key-value pairs in a dictionary, in order from highest
+key to lowest key.
 -}
 foldr : (k -> v -> a -> a) -> a -> Tree k v -> a
 foldr op acc tree =
