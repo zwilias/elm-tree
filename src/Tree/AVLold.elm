@@ -1,4 +1,4 @@
-module Tree.AVL exposing (..)
+module Tree.AVLold exposing (..)
 
 {-| AVL trees are the earliest example of self-balancing binary search trees.
 
@@ -37,7 +37,6 @@ right branch contains values greater than the node's own value.
 -}
 type Tree k v
     = Node Int k v (Tree k v) (Tree k v)
-    | Singleton k v
     | Empty
 
 
@@ -47,9 +46,9 @@ type Tree k v
 
 {-| A singleton in an AVL tree is a Node with both branch-points empty.
 -}
-singleton : k -> v -> Tree k v
+singleton : comparable -> v -> Tree comparable v
 singleton key val =
-    Singleton key val
+    Node 1 key val empty empty
 
 
 {-| An empty AVL tree is a single `Empty` node.
@@ -77,24 +76,6 @@ insert key value set =
         Empty ->
             singleton key value
 
-        Singleton head headVal ->
-            if key < head then
-                Node 2
-                    head
-                    headVal
-                    (singleton key value)
-                    empty
-                    |> balance
-            else if key > head then
-                Node 2
-                    head
-                    headVal
-                    empty
-                    (singleton key value)
-                    |> balance
-            else
-                Singleton head value
-
         Node height head headVal left right ->
             if key < head then
                 tree head headVal (insert key value left) right |> balance
@@ -117,12 +98,6 @@ remove key set =
         Empty ->
             set
 
-        Singleton head value ->
-            if head == key then
-                empty
-            else
-                set
-
         Node _ head headVal left right ->
             if key < head then
                 tree head headVal (remove key left) right |> balance
@@ -141,9 +116,6 @@ member key set =
     case set of
         Empty ->
             False
-
-        Singleton head _ ->
-            head == key
 
         Node _ head _ left right ->
             if key < head then
@@ -171,12 +143,6 @@ get key tree =
         Empty ->
             Nothing
 
-        Singleton head value ->
-            if head == key then
-                Just value
-            else
-                Nothing
-
         Node _ head value left right ->
             if key < head then
                 get key left
@@ -199,9 +165,6 @@ foldl op acc tree =
         Empty ->
             acc
 
-        Singleton key val ->
-            op key val acc
-
         Node _ key val left right ->
             foldl op acc left
                 |> op key val
@@ -216,9 +179,6 @@ foldr op acc tree =
     case tree of
         Empty ->
             acc
-
-        Singleton key val ->
-            op key val acc
 
         Node _ key val left right ->
             foldr op acc right
@@ -249,21 +209,20 @@ customSingleton 1 == < 1 . . >
 -}
 tree : k -> v -> Tree k v -> Tree k v -> Tree k v
 tree key value left right =
-    case ( left, right ) of
-        ( Empty, Empty ) ->
-            singleton key value
-
-        ( _, _ ) ->
-            Node
-                (max
-                    (height left)
-                    (height right)
-                    |> (+) 1
-                )
-                key
-                value
-                left
-                right
+    let
+        maxHeight : Int
+        maxHeight =
+            max
+                (height left)
+                (height right)
+                |> (+) 1
+    in
+        Node
+            maxHeight
+            key
+            value
+            left
+            right
 
 
 {-| The height of a set is something baked right into the Tree, and is important
@@ -287,9 +246,6 @@ height set =
         Empty ->
             0
 
-        Singleton _ _ ->
-            1
-
         Node height _ _ _ _ ->
             height
 
@@ -303,9 +259,6 @@ rotateLeft set =
         Node _ root rootVal less (Node _ pivot pivotVal between greater) ->
             tree pivot pivotVal (tree root rootVal less between) greater
 
-        Node _ root rootVal less (Singleton pivot pivotVal) ->
-            tree pivot pivotVal (tree root rootVal less empty) empty
-
         _ ->
             set
 
@@ -317,9 +270,6 @@ rotateRight set =
     case set of
         Node _ root rootVal (Node _ pivot pivotVal less between) greater ->
             tree pivot pivotVal less (tree root rootVal between greater)
-
-        Node _ root rootVal (Singleton pivot pivotVal) greater ->
-            tree pivot pivotVal empty (tree root rootVal empty greater)
 
         _ ->
             set
@@ -336,9 +286,6 @@ heightDiff set =
         Empty ->
             0
 
-        Singleton _ _ ->
-            0
-
         Node _ _ _ left right ->
             height right - height left
 
@@ -353,37 +300,28 @@ For more information on how this works, please refer to [Brian Hick's excellent
 series](https://www.brianthicks.com/post/2016/11/27/functional-sets-part-3-balancing/)
 on implementing AVL trees in Elm.
 -}
-balance : Tree comparable v -> Tree comparable v
+balance : Tree k v -> Tree k v
 balance set =
     case set of
         Empty ->
             set
 
-        Singleton _ _ ->
-            set
-
-        Node _ key value left right ->
-            let
-                setDiff =
-                    heightDiff set
-            in
-                if setDiff < -1 then
-                    if heightDiff left > 0 then
-                        -- left leaning tree with right-leaning left subtree. Rotate left, then right.
-                        tree key value (rotateLeft left) right |> rotateRight
-                    else
-                        -- left leaning tree, generally. Rotate right.
-                        rotateRight set
-                else if setDiff > 1 then
-                    if heightDiff right < 0 then
-                        -- right leaning tree with left-leaning right subtree. Rotate right, then left.
-                        tree key value left (rotateRight right) |> rotateLeft
-                    else
-                        -- right leaning tree, generally. Rotate left.
-                        rotateLeft set
-                else
-                    -- diff is -1, 0, or 1. Already balanced, no operation required.
-                    set
+        Node _ head hVal left right ->
+            if heightDiff set == -2 && heightDiff left > 0 then
+                -- Node leaning to the left with subtree leaning to the right
+                tree head hVal (rotateLeft left) right |> rotateRight
+            else if heightDiff set < -1 then
+                -- Node leaning to the left
+                rotateRight set
+            else if heightDiff set == 2 && heightDiff right < 0 then
+                -- Node leaning to the right with subtree leaning left
+                tree head hVal left (rotateRight right) |> rotateLeft
+            else if heightDiff set > 1 then
+                -- Node leaning to the right
+                rotateLeft set
+            else
+                -- Balanced tree
+                set
 
 
 

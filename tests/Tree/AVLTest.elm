@@ -53,6 +53,9 @@ checker0 tree =
         Empty ->
             True
 
+        Singleton _ _ ->
+            True
+
         Tree.Node _ key _ left right ->
             allInTree (\k v -> k < key) left
                 && allInTree (\k v -> k > key) right
@@ -75,10 +78,14 @@ allInTree predicate tree =
 checker1 : Tree comparable a -> Bool
 checker1 tree =
     case tree of
-        Tree.Empty ->
+        Empty ->
             True
 
-        Tree.Node _ _ _ left right ->
+        Singleton _ _ ->
+            (Tree.heightDiff tree |> abs)
+                <= 1
+
+        Node _ _ _ left right ->
             (Tree.heightDiff tree |> abs)
                 <= 1
                 && checker1 left

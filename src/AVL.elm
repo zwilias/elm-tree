@@ -118,6 +118,25 @@ renderTree set =
         Tree.Empty ->
             text "."
 
+        Tree.Singleton head _ ->
+            div
+                [ style
+                    [ ( "border", "1px solid grey" )
+                    , ( "padding", "5px" )
+                    , ( "margin", "5px" )
+                    , ( "border-radius", "5px" )
+                    , ( "background-color", "rgba(0, 0, 0, 0.05)" )
+                    ]
+                , onClickNoBubble <| RemoveNode head
+                ]
+                [ div []
+                    [ text head
+                    , br [] []
+                    , text <| toString (Tree.heightDiff set)
+                    ]
+                , renderLeftRight Tree.empty Tree.empty
+                ]
+
         Tree.Node _ head _ left right ->
             div
                 [ style
