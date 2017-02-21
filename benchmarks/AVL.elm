@@ -41,11 +41,11 @@ forValues name size keyer valuer =
 suiteOfSize : Int -> Benchmark
 suiteOfSize size =
     describe ("dicts of size " ++ toString size)
-        [ forValues "int" size identity (always ())
+        [ forValues "string" size toString (always ())
+        , forValues "int" size identity (always ())
         , forValues "float" size toFloat (always ())
         , forValues "time" size (toFloat >> (*) Time.millisecond) (always ())
         , forValues "char" size Char.fromCode (always ())
-        , forValues "string" size toString (always ())
         , forValues "tuple of int" size (\i -> ( i, i )) (always ())
         ]
 
