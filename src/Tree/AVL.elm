@@ -26,6 +26,8 @@ rotations for every internal node while the stack unwinds.
 @docs tree, rotateLeft, rotateRight, height, heightDiff, balance
 -}
 
+import Function exposing (swirlr)
+
 
 {-| A node in an avl tree is either a node with one key and zero, one or two
 branches, or is empty. Some trees (like Two Three trees) impose the restriction
@@ -220,7 +222,7 @@ foldl op acc tree =
         Node _ key val left right ->
             foldl op acc left
                 |> op key val
-                |> (\acc -> foldl op acc right)
+                |> swirlr foldl right op
 
 
 {-| Fold over the key-value pairs in a dictionary, in order from highest
@@ -238,7 +240,7 @@ foldr op acc tree =
         Node _ key val left right ->
             foldr op acc right
                 |> op key val
-                |> (\acc -> foldr op acc left)
+                |> swirlr foldr left op
 
 
 
