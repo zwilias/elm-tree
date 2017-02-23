@@ -78,30 +78,36 @@ insert key value set =
             singleton key value
 
         Singleton head headVal ->
-            if key < head then
-                Node 2
-                    head
-                    headVal
-                    (singleton key value)
-                    empty
-                    |> balance
-            else if key > head then
-                Node 2
-                    head
-                    headVal
-                    empty
-                    (singleton key value)
-                    |> balance
-            else
-                Singleton head value
+            case compare key head of
+                LT ->
+                    Node 2
+                        head
+                        headVal
+                        (singleton key value)
+                        empty
+                        |> balance
+
+                GT ->
+                    Node 2
+                        head
+                        headVal
+                        empty
+                        (singleton key value)
+                        |> balance
+
+                EQ ->
+                    Singleton head value
 
         Node height head headVal left right ->
-            if key < head then
-                tree head headVal (insert key value left) right |> balance
-            else if key > head then
-                tree head headVal left (insert key value right) |> balance
-            else
-                tree head value left right
+            case compare key head of
+                LT ->
+                    tree head headVal (insert key value left) right |> balance
+
+                GT ->
+                    tree head headVal left (insert key value right) |> balance
+
+                EQ ->
+                    tree head value left right
 
 
 {-| Removal in AVL trees works by searching for the node to be removed, and
@@ -124,12 +130,15 @@ remove key set =
                 set
 
         Node _ head headVal left right ->
-            if key < head then
-                tree head headVal (remove key left) right |> balance
-            else if key > head then
-                tree head headVal left (remove key right) |> balance
-            else
-                foldl insert right left
+            case compare key head of
+                LT ->
+                    tree head headVal (remove key left) right |> balance
+
+                GT ->
+                    tree head headVal left (remove key right) |> balance
+
+                EQ ->
+                    foldl insert right left
 
 
 {-| Member checks happen the same way as in other binary trees, recursively
@@ -146,12 +155,15 @@ member key set =
             head == key
 
         Node _ head _ left right ->
-            if key < head then
-                member key left
-            else if key > head then
-                member key right
-            else
-                True
+            case compare key head of
+                LT ->
+                    member key left
+
+                GT ->
+                    member key right
+
+                EQ ->
+                    True
 
 
 {-| Get the value associated with a key. If the key is not found, return
@@ -178,12 +190,15 @@ get key tree =
                 Nothing
 
         Node _ head value left right ->
-            if key < head then
-                get key left
-            else if key > head then
-                get key right
-            else
-                Just value
+            case compare key head of
+                LT ->
+                    get key left
+
+                GT ->
+                    get key right
+
+                EQ ->
+                    Just value
 
 
 
@@ -367,15 +382,15 @@ balance set =
                 setDiff =
                     heightDiff set
             in
-                if setDiff < -1 then
-                    if heightDiff left > 0 then
+                if setDiff == -2 then
+                    if heightDiff left == 1 then
                         -- left leaning tree with right-leaning left subtree. Rotate left, then right.
                         tree key value (rotateLeft left) right |> rotateRight
                     else
                         -- left leaning tree, generally. Rotate right.
                         rotateRight set
-                else if setDiff > 1 then
-                    if heightDiff right < 0 then
+                else if setDiff == 2 then
+                    if heightDiff right == -1 then
                         -- right leaning tree with left-leaning right subtree. Rotate right, then left.
                         tree key value left (rotateRight right) |> rotateLeft
                     else
