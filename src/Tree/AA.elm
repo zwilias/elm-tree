@@ -84,12 +84,15 @@ get key tree =
             Nothing
 
         Node _ left self value right ->
-            if key < self then
-                get key left
-            else if key > self then
-                get key right
-            else
-                Just value
+            case compare key self of
+                LT ->
+                    get key left
+
+                GT ->
+                    get key right
+
+                EQ ->
+                    Just value
 
 
 {-| Insertion in an AA tree is quite simple:
@@ -117,37 +120,40 @@ insert key value tree =
                 singleton key value
 
             Node level left selfk selfv right ->
-                if key < selfk then
-                    Node
-                        level
-                        (insert
-                            key
-                            value
+                case compare key selfk of
+                    LT ->
+                        Node
+                            level
+                            (insert
+                                key
+                                value
+                                left
+                            )
+                            selfk
+                            selfv
+                            right
+                            |> fixup
+
+                    GT ->
+                        Node
+                            level
                             left
-                        )
-                        selfk
-                        selfv
-                        right
-                        |> fixup
-                else if key == selfk then
-                    Node
-                        level
-                        left
-                        key
-                        value
-                        right
-                else
-                    Node
-                        level
-                        left
-                        selfk
-                        selfv
-                        (insert
+                            selfk
+                            selfv
+                            (insert
+                                key
+                                value
+                                right
+                            )
+                            |> fixup
+
+                    EQ ->
+                        Node
+                            level
+                            left
                             key
                             value
                             right
-                        )
-                        |> fixup
 
 
 {-| Removal from AA trees works as follows:
@@ -164,38 +170,41 @@ remove key tree =
             Empty
 
         Node level left selfk selfv right ->
-            if key < selfk then
-                Node level (remove key left) selfk selfv right |> rebalance
-            else if key == selfk then
-                case ( left, right ) of
-                    ( Empty, Empty ) ->
-                        Empty
+            case compare key selfk of
+                LT ->
+                    Node level (remove key left) selfk selfv right |> rebalance
 
-                    ( Empty, _ ) ->
-                        let
-                            ( successork, successorv ) =
-                                unsafeMinimum right
+                EQ ->
+                    case ( left, right ) of
+                        ( Empty, Empty ) ->
+                            Empty
 
-                            newRight : Tree comparable v
-                            newRight =
-                                remove successork right
-                        in
-                            Node level left successork successorv newRight
-                                |> rebalance
+                        ( Empty, _ ) ->
+                            let
+                                ( successork, successorv ) =
+                                    unsafeMinimum right
 
-                    ( _, _ ) ->
-                        let
-                            ( predecessork, predecessorv ) =
-                                unsafeMaximum left
+                                newRight : Tree comparable v
+                                newRight =
+                                    remove successork right
+                            in
+                                Node level left successork successorv newRight
+                                    |> rebalance
 
-                            newLeft : Tree comparable v
-                            newLeft =
-                                remove predecessork left
-                        in
-                            Node level newLeft predecessork predecessorv right
-                                |> rebalance
-            else
-                Node level left selfk selfv (remove key right) |> rebalance
+                        ( _, _ ) ->
+                            let
+                                ( predecessork, predecessorv ) =
+                                    unsafeMaximum left
+
+                                newLeft : Tree comparable v
+                                newLeft =
+                                    remove predecessork left
+                            in
+                                Node level newLeft predecessork predecessorv right
+                                    |> rebalance
+
+                GT ->
+                    Node level left selfk selfv (remove key right) |> rebalance
 
 
 {-| Check if an item is a member of a tree, recursively.
@@ -207,12 +216,15 @@ member item tree =
             False
 
         Node _ left self _ right ->
-            if item < self then
-                member item left
-            else if item == self then
-                True
-            else
-                member item right
+            case compare item self of
+                LT ->
+                    member item left
+
+                EQ ->
+                    True
+
+                GT ->
+                    member item right
 
 
 {-| Fold over the key-value pairs in a dictionary, in order from lowest

@@ -24,17 +24,17 @@ forValues name size keyer valuer =
     in
         describe (name ++ " (" ++ toString size ++ " items)")
             [ Benchmark.compare "insert"
-                (Benchmark.benchmark3 "Dict.TwoThree" AltDict.insert key value (AltDict.fromList source))
                 (Benchmark.benchmark3 "Dict" Dict.insert key value (Dict.fromList source))
+                (Benchmark.benchmark3 "Dict.TwoThree" AltDict.insert key value (AltDict.fromList source))
             , Benchmark.compare "get"
-                (Benchmark.benchmark2 "Dict.TwoThree" AltDict.get key (AltDict.fromList source))
                 (Benchmark.benchmark2 "Dict" Dict.get key (Dict.fromList source))
+                (Benchmark.benchmark2 "Dict.TwoThree" AltDict.get key (AltDict.fromList source))
             , Benchmark.compare "remove"
-                (Benchmark.benchmark2 "Dict.TwoThree" AltDict.remove key (AltDict.fromList source))
                 (Benchmark.benchmark2 "Dict" Dict.remove key (Dict.fromList source))
+                (Benchmark.benchmark2 "Dict.TwoThree" AltDict.remove key (AltDict.fromList source))
             , Benchmark.compare "toList"
-                (Benchmark.benchmark1 "Dict.TwoThree" AltDict.toList (AltDict.fromList source))
                 (Benchmark.benchmark1 "Dict" Dict.toList (Dict.fromList source))
+                (Benchmark.benchmark1 "Dict.TwoThree" AltDict.toList (AltDict.fromList source))
             ]
 
 
